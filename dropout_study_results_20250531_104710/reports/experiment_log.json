@@ -1,0 +1,195 @@
+{
+  "start_time": "2025-05-31T10:47:10.815160",
+  "device": "cpu",
+  "experiments": [
+    {
+      "dataset": "MNIST",
+      "parameters": {
+        "input_size": 784,
+        "num_classes": 10,
+        "num_epochs": 15,
+        "learning_rate": 0.001
+      },
+      "models": {
+        "Single_No_Dropout": {
+          "architecture": "Single Hidden Layer (512 neurons)",
+          "dropout_rate": 0.0,
+          "test_accuracy": 96.88,
+          "training_time": 156.08938455581665,
+          "overfitting_gap": 2.238333333333344
+        },
+        "Single_With_Dropout": {
+          "architecture": "Single Hidden Layer (512 neurons)",
+          "dropout_rate": 0.3,
+          "test_accuracy": 97.89,
+          "training_time": 167.1057050228119,
+          "overfitting_gap": 0.061666666666667425
+        },
+        "Multi_No_Dropout": {
+          "architecture": "Multi Hidden Layers (512-256-128 neurons)",
+          "dropout_rate": 0.0,
+          "test_accuracy": 97.78,
+          "training_time": 167.54998326301575,
+          "overfitting_gap": 1.3100000000000023
+        },
+        "Multi_With_Dropout": {
+          "architecture": "Multi Hidden Layers (512-256-128 neurons)",
+          "dropout_rate": 0.3,
+          "test_accuracy": 97.98,
+          "training_time": 179.62376999855042,
+          "overfitting_gap": -0.6500000000000057
+        }
+      }
+    },
+    {
+      "dataset": "FashionMNIST",
+      "parameters": {
+        "input_size": 784,
+        "num_classes": 10,
+        "num_epochs": 15,
+        "learning_rate": 0.001
+      },
+      "models": {
+        "Single_No_Dropout": {
+          "architecture": "Single Hidden Layer (512 neurons)",
+          "dropout_rate": 0.0,
+          "test_accuracy": 88.38,
+          "training_time": 164.13524889945984,
+          "overfitting_gap": 5.0033333333333445
+        },
+        "Single_With_Dropout": {
+          "architecture": "Single Hidden Layer (512 neurons)",
+          "dropout_rate": 0.3,
+          "test_accuracy": 88.95,
+          "training_time": 171.6513614654541,
+          "overfitting_gap": 1.673333333333332
+        },
+        "Multi_No_Dropout": {
+          "architecture": "Multi Hidden Layers (512-256-128 neurons)",
+          "dropout_rate": 0.0,
+          "test_accuracy": 88.68,
+          "training_time": 171.03245735168457,
+          "overfitting_gap": 4.99499999999999
+        },
+        "Multi_With_Dropout": {
+          "architecture": "Multi Hidden Layers (512-256-128 neurons)",
+          "dropout_rate": 0.3,
+          "test_accuracy": 88.43,
+          "training_time": 182.16908431053162,
+          "overfitting_gap": 1.213333333333324
+        }
+      }
+    },
+    {
+      "type": "dropout_analysis",
+      "data": {
+        "dataset": "MNIST",
+        "dropout_rates_tested": [
+          0.0,
+          0.1,
+          0.2,
+          0.3,
+          0.4,
+          0.5
+        ],
+        "parameters": {
+          "architecture": "Multi Hidden Layers (512-256-128)",
+          "num_epochs": 10,
+          "learning_rate": 0.001
+        },
+        "results": {
+          "0.0": {
+            "train_accuracy": 98.63833333333334,
+            "test_accuracy": 96.3,
+            "overfitting_gap": 2.3383333333333383
+          },
+          "0.1": {
+            "train_accuracy": 98.10333333333334,
+            "test_accuracy": 97.83,
+            "overfitting_gap": 0.27333333333334053
+          },
+          "0.2": {
+            "train_accuracy": 97.61,
+            "test_accuracy": 97.71,
+            "overfitting_gap": -0.09999999999999432
+          },
+          "0.3": {
+            "train_accuracy": 96.82333333333334,
+            "test_accuracy": 97.62,
+            "overfitting_gap": -0.7966666666666669
+          },
+          "0.4": {
+            "train_accuracy": 95.95333333333333,
+            "test_accuracy": 97.21,
+            "overfitting_gap": -1.2566666666666606
+          },
+          "0.5": {
+            "train_accuracy": 94.19666666666667,
+            "test_accuracy": 96.65,
+            "overfitting_gap": -2.453333333333333
+          }
+        }
+      }
+    },
+    {
+      "type": "dropout_analysis",
+      "data": {
+        "dataset": "FashionMNIST",
+        "dropout_rates_tested": [
+          0.0,
+          0.1,
+          0.2,
+          0.3,
+          0.4,
+          0.5
+        ],
+        "parameters": {
+          "architecture": "Multi Hidden Layers (512-256-128)",
+          "num_epochs": 10,
+          "learning_rate": 0.001
+        },
+        "results": {
+          "0.0": {
+            "train_accuracy": 91.63833333333334,
+            "test_accuracy": 88.05,
+            "overfitting_gap": 3.5883333333333383
+          },
+          "0.1": {
+            "train_accuracy": 90.48666666666666,
+            "test_accuracy": 87.77,
+            "overfitting_gap": 2.7166666666666686
+          },
+          "0.2": {
+            "train_accuracy": 89.67333333333333,
+            "test_accuracy": 88.32,
+            "overfitting_gap": 1.3533333333333388
+          },
+          "0.3": {
+            "train_accuracy": 88.74166666666666,
+            "test_accuracy": 88.16,
+            "overfitting_gap": 0.5816666666666634
+          },
+          "0.4": {
+            "train_accuracy": 87.42333333333333,
+            "test_accuracy": 87.51,
+            "overfitting_gap": -0.08666666666667311
+          },
+          "0.5": {
+            "train_accuracy": 86.38166666666666,
+            "test_accuracy": 87.09,
+            "overfitting_gap": -0.7083333333333428
+          }
+        }
+      }
+    }
+  ],
+  "conclusions": [
+    "Il dropout riduce l'overfitting in media del 1.2% su MNIST",
+    "Fashion-MNIST presenta overfitting maggiore di MNIST (gap medio 3.2% vs 0.7%)",
+    "Le reti multi-strato ottengono performance superiori alle single-layer",
+    "Dropout ottimale per MNIST: 0.1 (accuracy 97.83%)",
+    "Dropout ottimale per Fashion-MNIST: 0.2 (accuracy 88.32%)"
+  ],
+  "end_time": "2025-05-31T11:35:49.020465",
+  "total_duration": "0:48:38.205305"
+}

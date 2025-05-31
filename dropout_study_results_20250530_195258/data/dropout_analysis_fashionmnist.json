@@ -1,0 +1,48 @@
+{
+  "dataset": "FashionMNIST",
+  "dropout_rates_tested": [
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5
+  ],
+  "parameters": {
+    "architecture": "Multi Hidden Layers (512-256-128)",
+    "num_epochs": 10,
+    "learning_rate": 0.001
+  },
+  "results": {
+    "0.0": {
+      "train_accuracy": 91.67,
+      "test_accuracy": 88.98,
+      "overfitting_gap": 2.6899999999999977
+    },
+    "0.1": {
+      "train_accuracy": 90.64,
+      "test_accuracy": 88.38,
+      "overfitting_gap": 2.260000000000005
+    },
+    "0.2": {
+      "train_accuracy": 89.54166666666667,
+      "test_accuracy": 88.25,
+      "overfitting_gap": 1.2916666666666714
+    },
+    "0.3": {
+      "train_accuracy": 88.66833333333334,
+      "test_accuracy": 88.0,
+      "overfitting_gap": 0.6683333333333366
+    },
+    "0.4": {
+      "train_accuracy": 87.67166666666667,
+      "test_accuracy": 87.14,
+      "overfitting_gap": 0.5316666666666663
+    },
+    "0.5": {
+      "train_accuracy": 86.16833333333334,
+      "test_accuracy": 86.55,
+      "overfitting_gap": -0.3816666666666606
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "dataset": "MNIST",
+  "dropout_rates_tested": [
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5
+  ],
+  "parameters": {
+    "architecture": "Multi Hidden Layers (512-256-128)",
+    "num_epochs": 10,
+    "learning_rate": 0.001
+  },
+  "results": {
+    "0.0": {
+      "train_accuracy": 98.63833333333334,
+      "test_accuracy": 96.3,
+      "overfitting_gap": 2.3383333333333383
+    },
+    "0.1": {
+      "train_accuracy": 98.10333333333334,
+      "test_accuracy": 97.83,
+      "overfitting_gap": 0.27333333333334053
+    },
+    "0.2": {
+      "train_accuracy": 97.61,
+      "test_accuracy": 97.71,
+      "overfitting_gap": -0.09999999999999432
+    },
+    "0.3": {
+      "train_accuracy": 96.82333333333334,
+      "test_accuracy": 97.62,
+      "overfitting_gap": -0.7966666666666669
+    },
+    "0.4": {
+      "train_accuracy": 95.95333333333333,
+      "test_accuracy": 97.21,
+      "overfitting_gap": -1.2566666666666606
+    },
+    "0.5": {
+      "train_accuracy": 94.19666666666667,
+      "test_accuracy": 96.65,
+      "overfitting_gap": -2.453333333333333
+    }
+  }
+}

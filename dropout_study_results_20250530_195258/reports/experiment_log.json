@@ -1,0 +1,195 @@
+{
+  "start_time": "2025-05-30T19:52:58.197696",
+  "device": "cpu",
+  "experiments": [
+    {
+      "dataset": "MNIST",
+      "parameters": {
+        "input_size": 784,
+        "num_classes": 10,
+        "num_epochs": 15,
+        "learning_rate": 0.001
+      },
+      "models": {
+        "Single_No_Dropout": {
+          "architecture": "Single Hidden Layer (512 neurons)",
+          "dropout_rate": 0.0,
+          "test_accuracy": 97.03,
+          "training_time": 163.3719985485077,
+          "overfitting_gap": 2.1099999999999994
+        },
+        "Single_With_Dropout": {
+          "architecture": "Single Hidden Layer (512 neurons)",
+          "dropout_rate": 0.3,
+          "test_accuracy": 97.91,
+          "training_time": 169.3964831829071,
+          "overfitting_gap": -0.0016666666666651508
+        },
+        "Multi_No_Dropout": {
+          "architecture": "Multi Hidden Layers (512-256-128 neurons)",
+          "dropout_rate": 0.0,
+          "test_accuracy": 97.86,
+          "training_time": 172.6704592704773,
+          "overfitting_gap": 1.3116666666666674
+        },
+        "Multi_With_Dropout": {
+          "architecture": "Multi Hidden Layers (512-256-128 neurons)",
+          "dropout_rate": 0.3,
+          "test_accuracy": 97.66,
+          "training_time": 185.41903805732727,
+          "overfitting_gap": -0.4366666666666674
+        }
+      }
+    },
+    {
+      "dataset": "FashionMNIST",
+      "parameters": {
+        "input_size": 784,
+        "num_classes": 10,
+        "num_epochs": 15,
+        "learning_rate": 0.001
+      },
+      "models": {
+        "Single_No_Dropout": {
+          "architecture": "Single Hidden Layer (512 neurons)",
+          "dropout_rate": 0.0,
+          "test_accuracy": 88.23,
+          "training_time": 163.74644017219543,
+          "overfitting_gap": 5.2266666666666595
+        },
+        "Single_With_Dropout": {
+          "architecture": "Single Hidden Layer (512 neurons)",
+          "dropout_rate": 0.3,
+          "test_accuracy": 88.32,
+          "training_time": 172.2252058982849,
+          "overfitting_gap": 2.4950000000000045
+        },
+        "Multi_No_Dropout": {
+          "architecture": "Multi Hidden Layers (512-256-128 neurons)",
+          "dropout_rate": 0.0,
+          "test_accuracy": 88.74,
+          "training_time": 171.95796847343445,
+          "overfitting_gap": 4.856666666666669
+        },
+        "Multi_With_Dropout": {
+          "architecture": "Multi Hidden Layers (512-256-128 neurons)",
+          "dropout_rate": 0.3,
+          "test_accuracy": 88.27,
+          "training_time": 181.66713118553162,
+          "overfitting_gap": 1.4399999999999977
+        }
+      }
+    },
+    {
+      "type": "dropout_analysis",
+      "data": {
+        "dataset": "MNIST",
+        "dropout_rates_tested": [
+          0.0,
+          0.1,
+          0.2,
+          0.3,
+          0.4,
+          0.5
+        ],
+        "parameters": {
+          "architecture": "Multi Hidden Layers (512-256-128)",
+          "num_epochs": 10,
+          "learning_rate": 0.001
+        },
+        "results": {
+          "0.0": {
+            "train_accuracy": 98.74,
+            "test_accuracy": 97.52,
+            "overfitting_gap": 1.2199999999999989
+          },
+          "0.1": {
+            "train_accuracy": 98.16666666666667,
+            "test_accuracy": 97.2,
+            "overfitting_gap": 0.9666666666666686
+          },
+          "0.2": {
+            "train_accuracy": 97.49,
+            "test_accuracy": 97.74,
+            "overfitting_gap": -0.25
+          },
+          "0.3": {
+            "train_accuracy": 96.80666666666667,
+            "test_accuracy": 97.44,
+            "overfitting_gap": -0.6333333333333258
+          },
+          "0.4": {
+            "train_accuracy": 95.82,
+            "test_accuracy": 97.41,
+            "overfitting_gap": -1.5900000000000034
+          },
+          "0.5": {
+            "train_accuracy": 94.45,
+            "test_accuracy": 96.77,
+            "overfitting_gap": -2.319999999999993
+          }
+        }
+      }
+    },
+    {
+      "type": "dropout_analysis",
+      "data": {
+        "dataset": "FashionMNIST",
+        "dropout_rates_tested": [
+          0.0,
+          0.1,
+          0.2,
+          0.3,
+          0.4,
+          0.5
+        ],
+        "parameters": {
+          "architecture": "Multi Hidden Layers (512-256-128)",
+          "num_epochs": 10,
+          "learning_rate": 0.001
+        },
+        "results": {
+          "0.0": {
+            "train_accuracy": 91.67,
+            "test_accuracy": 88.98,
+            "overfitting_gap": 2.6899999999999977
+          },
+          "0.1": {
+            "train_accuracy": 90.64,
+            "test_accuracy": 88.38,
+            "overfitting_gap": 2.260000000000005
+          },
+          "0.2": {
+            "train_accuracy": 89.54166666666667,
+            "test_accuracy": 88.25,
+            "overfitting_gap": 1.2916666666666714
+          },
+          "0.3": {
+            "train_accuracy": 88.66833333333334,
+            "test_accuracy": 88.0,
+            "overfitting_gap": 0.6683333333333366
+          },
+          "0.4": {
+            "train_accuracy": 87.67166666666667,
+            "test_accuracy": 87.14,
+            "overfitting_gap": 0.5316666666666663
+          },
+          "0.5": {
+            "train_accuracy": 86.16833333333334,
+            "test_accuracy": 86.55,
+            "overfitting_gap": -0.3816666666666606
+          }
+        }
+      }
+    }
+  ],
+  "conclusions": [
+    "Il dropout riduce l'overfitting in media del 1.7% su MNIST",
+    "Fashion-MNIST presenta overfitting maggiore di MNIST (gap medio 3.5% vs 0.7%)",
+    "Le reti multi-strato ottengono performance superiori alle single-layer",
+    "Dropout ottimale per MNIST: 0.2 (accuracy 97.74%)",
+    "Dropout ottimale per Fashion-MNIST: 0.0 (accuracy 88.98%)"
+  ],
+  "end_time": "2025-05-31T01:50:56.883624",
+  "total_duration": "5:57:58.685928"
+}
