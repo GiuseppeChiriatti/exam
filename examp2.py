@@ -1454,6 +1454,7 @@ def visualize_dropout_effect(model_with_dropout, model_without_dropout, test_loa
         act_with = activations_with['fc1'][0].cpu().numpy()
         act_without = activations_without['fc1'][0].cpu().numpy()
         
+        # GRAFICO NORMALE (scala lineare)
         fig, axes = plt.subplots(1, 3, figsize=(18, 5))
         fig.suptitle(f'Effetto del Dropout sulle Attivazioni - {dataset_name}', fontsize=16)
         
@@ -1482,13 +1483,74 @@ def visualize_dropout_effect(model_with_dropout, model_without_dropout, test_loa
         
         plt.tight_layout()
         
-        # Salvataggio del plot
+        # Salvataggio del plot normale
         if save_plots:
             plot_path = os.path.join(output_dirs['plots'], f'dropout_activations_{dataset_name.lower()}.png')
             plt.savefig(plot_path, dpi=300, bbox_inches='tight')
             print(f"🧠 Analisi attivazioni salvata: {plot_path}")
         
         plt.show()
+        
+        # GRAFICO CON NORMALIZZAZIONE LOGARITMICA
+        fig_log, axes_log = plt.subplots(1, 3, figsize=(18, 5))
+        fig_log.suptitle(f'Effetto del Dropout sulle Attivazioni - {dataset_name} (Scala Logaritmica)', fontsize=16)
+        
+        # Attivazioni senza dropout - scala log
+        n_without, bins_without, patches_without = axes_log[0].hist(act_without, bins=50, alpha=0.7, color='blue', density=True)
+        axes_log[0].set_yscale('log')
+        axes_log[0].set_title('Attivazioni SENZA Dropout\n(Scala Logaritmica)')
+        axes_log[0].set_xlabel('Valore Attivazione')
+        axes_log[0].set_ylabel('Densità (log)')
+        axes_log[0].grid(True, alpha=0.3)
+        
+        # Attivazioni con dropout - scala log
+        n_with, bins_with, patches_with = axes_log[1].hist(act_with, bins=50, alpha=0.7, color='red', density=True)
+        axes_log[1].set_yscale('log')
+        axes_log[1].set_title('Attivazioni CON Dropout\n(Scala Logaritmica)')
+        axes_log[1].set_xlabel('Valore Attivazione')
+        axes_log[1].set_ylabel('Densità (log)')
+        axes_log[1].grid(True, alpha=0.3)
+        
+        # Confronto sovrapposto - scala log
+        axes_log[2].hist(act_without, bins=50, alpha=0.5, color='blue', density=True, label='Senza Dropout')
+        axes_log[2].hist(act_with, bins=50, alpha=0.5, color='red', density=True, label='Con Dropout')
+        axes_log[2].set_yscale('log')
+        axes_log[2].set_title('Confronto Attivazioni\n(Scala Logaritmica)')
+        axes_log[2].set_xlabel('Valore Attivazione')
+        axes_log[2].set_ylabel('Densità (log)')
+        axes_log[2].legend()
+        axes_log[2].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        # Salvataggio del plot logaritmico
+        if save_plots:
+            plot_path_log = os.path.join(output_dirs['plots'], f'dropout_activations_{dataset_name.lower()}_log.png')
+            plt.savefig(plot_path_log, dpi=300, bbox_inches='tight')
+            print(f"📊 Analisi attivazioni logaritmica salvata: {plot_path_log}")
+        
+        plt.show()
+        
+        # Statistiche per confronto
+        print(f"\n📈 STATISTICHE ATTIVAZIONI - {dataset_name}:")
+        print(f"{'='*50}")
+        print(f"SENZA DROPOUT:")
+        print(f"  - Media: {np.mean(act_without):.4f}")
+        print(f"  - Deviazione Standard: {np.std(act_without):.4f}")
+        print(f"  - Min: {np.min(act_without):.4f}")
+        print(f"  - Max: {np.max(act_without):.4f}")
+        print(f"  - Neuroni attivi (>0): {np.sum(act_without > 0)}/{len(act_without)} ({100*np.sum(act_without > 0)/len(act_without):.1f}%)")
+        
+        print(f"\nCON DROPOUT:")
+        print(f"  - Media: {np.mean(act_with):.4f}")
+        print(f"  - Deviazione Standard: {np.std(act_with):.4f}")
+        print(f"  - Min: {np.min(act_with):.4f}")
+        print(f"  - Max: {np.max(act_with):.4f}")
+        print(f"  - Neuroni attivi (>0): {np.sum(act_with > 0)}/{len(act_with)} ({100*np.sum(act_with > 0)/len(act_with):.1f}%)")
+        
+        print(f"\nCOMPARAZIONE:")
+        print(f"  - Riduzione media attivazione: {((np.mean(act_without) - np.mean(act_with))/np.mean(act_without)*100):.1f}%")
+        print(f"  - Riduzione neuroni attivi: {((np.sum(act_without > 0) - np.sum(act_with > 0))/np.sum(act_without > 0)*100):.1f}%")
 
 # Funzione per demo delle visualizzazioni (può essere chiamata separatamente)
 def demo_visualizations(dataset_name='MNIST', model_type='multi'):
