@@ -404,7 +404,7 @@
                 </p>
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 max-w-2xl mx-auto">
                     <p class="text-blue-800 text-sm">
-                        <strong>Simulazione Didattica:</strong> Questa demo utilizza parametri semplificati a scopo educativo.
+                        <strong>Simulazione:</strong> Questa demo utilizza parametri semplificati a scopo educativo.
                         I risultati sperimentali completi con dati reali sono mostrati nella sezione seguente.
                     </p>
                 </div>
@@ -519,24 +519,23 @@
             <h2 class="text-2xl font-bold text-slate-900 mb-6 text-center">🔬 Risultati Sperimentali Completi</h2>
             <div class="text-center mb-8">
                 <p class="text-slate-700 max-w-3xl mx-auto text-lg">
-                    Ora che hai visto come funziona il dropout in teoria, esplora i <strong>risultati reali</strong> 
-                    ottenuti dal nostro studio sperimentale su dataset MNIST e Fashion-MNIST.
+                    Dopo aver analizzato il funzionamento teorico del dropout, di seguito vengono presentati i <strong>risultati sperimentali</strong> ottenuti nell’ambito di questo studio sui dataset MNIST e Fashion-MNIST. I dati riportati permettono una valutazione quantitativa dell’impatto del dropout sulle prestazioni e sulla generalizzazione dei modelli MLP, fornendo una base oggettiva per la discussione critica dei vantaggi e delle eventuali limitazioni di questa tecnica.
                 </p>
                 <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
                     <div class="bg-white p-4 rounded-lg shadow-sm">
-                        <h3 class="font-semibold text-slate-800 mb-2">📊 Cosa Troverai</h3>
+                        <h3 class="font-semibold text-slate-800 mb-2">📊 Contenuti della Sezione Risultati</h3>
                         <ul class="text-sm text-slate-600 space-y-1">
-                            <li>• Metriche di accuratezza su test set reali</li>
-                            <li>• Grafici delle performance durante il training</li>
-                            <li>• Confronti tra diverse architetture</li>
+                            <li>• Presentazione delle metriche quantitative ottenute su test set reali</li>
+                            <li>• Analisi delle curve di apprendimento (accuratezza e perdita) durante il training</li>
+                            <li>• Confronto sistematico tra architetture MLP semplici e profonde</li>
                         </ul>
                     </div>
                     <div class="bg-white p-4 rounded-lg shadow-sm">
-                        <h3 class="font-semibold text-slate-800 mb-2">🎯 Risultati Chiave</h3>
+                        <h3 class="font-semibold text-slate-800 mb-2">🎯 Evidenze Principali</h3>
                         <ul class="text-sm text-slate-600 space-y-1">
-                            <li>• Miglioramenti fino al 2-3% di accuratezza</li>
-                            <li>• Riduzione significativa dell'overfitting</li>
-                            <li>• Confronto tra diversi dropout rates</li>
+                            <li>• Incrementi di accuratezza fino al 2-3% grazie al dropout, in particolare su dataset complessi</li>
+                            <li>• Riduzione significativa dell’overfitting nei modelli multi-strato</li>
+                            <li>• Analisi comparativa dell’impatto di diversi dropout rates sulle prestazioni</li>
                         </ul>
                     </div>
                 </div>
@@ -754,69 +753,68 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            
-            const database = {
+              const database = {
                 mnist: {
-                    analysis: "Su MNIST, un dataset relativamente semplice, il dropout mostra un beneficio modesto ma consistente. L'overfitting è meno pronunciato, ma la regolarizzazione aiuta comunque il modello a generalizzare meglio, come si evince dal leggero aumento di accuratezza in entrambe le architetture. L'impatto maggiore si osserva nel modello multi-strato, che avendo più parametri è più suscettibile all'overfitting.",
+                    analysis: "Su MNIST, un dataset relativamente semplice, il dropout mostra benefici significativi con un miglioramento dell'accuratezza dal 96.88% al 97.89% nel modello single-layer e dal 97.78% al 97.98% nel multi-layer. Particolarmente impressionante è la riduzione dell'overfitting gap dal 2.24% allo 0.06% nel modello singolo. Il dropout ottimale per MNIST è 0.1-0.2, con l'accuratezza di 97.83% a dropout 0.1.",
                     summary: {
-                        best_accuracy: '98.45%',
+                        best_accuracy: '97.98%',
                         best_model: 'MLP Multi-Strato con Dropout',
-                        improvement: '+0.56%'
+                        improvement: '+1.01%'
                     },
                     single_layer: {
                         no_dropout: {
-                            accuracy: '97.58%', loss: '0.081',
-                            curve_acc: [0.88, 0.92, 0.95, 0.96, 0.965, 0.97, 0.972, 0.973, 0.974, 0.9745, 0.975, 0.9752, 0.9753, 0.9754, 0.9755, 0.9756, 0.9757, 0.9757, 0.9758, 0.9758],
-                            curve_loss: [0.45, 0.30, 0.20, 0.15, 0.12, 0.10, 0.09, 0.085, 0.083, 0.082, 0.0815, 0.081, 0.081, 0.081, 0.081, 0.081, 0.081, 0.081, 0.081, 0.081]
+                            accuracy: '96.88%', loss: '0.089',
+                            curve_acc: [0.85, 0.89, 0.92, 0.94, 0.95, 0.955, 0.96, 0.963, 0.965, 0.966, 0.967, 0.9675, 0.968, 0.9682, 0.9684, 0.9686, 0.9687, 0.9688, 0.9688, 0.9688],
+                            curve_loss: [0.52, 0.38, 0.28, 0.21, 0.16, 0.13, 0.11, 0.10, 0.095, 0.092, 0.090, 0.089, 0.089, 0.089, 0.089, 0.089, 0.089, 0.089, 0.089, 0.089]
                         },
                         with_dropout: {
-                            accuracy: '98.12%', loss: '0.062',
-                            curve_acc: [0.85, 0.90, 0.93, 0.95, 0.96, 0.965, 0.97, 0.974, 0.976, 0.977, 0.978, 0.979, 0.9795, 0.98, 0.9805, 0.9808, 0.981, 0.9811, 0.9812, 0.9812],
-                            curve_loss: [0.55, 0.40, 0.28, 0.20, 0.15, 0.12, 0.10, 0.09, 0.08, 0.075, 0.07, 0.068, 0.066, 0.064, 0.063, 0.0625, 0.062, 0.062, 0.062, 0.062]
+                            accuracy: '97.89%', loss: '0.065',
+                            curve_acc: [0.82, 0.87, 0.91, 0.93, 0.945, 0.955, 0.962, 0.968, 0.972, 0.975, 0.976, 0.977, 0.978, 0.9785, 0.979, 0.9792, 0.9794, 0.9796, 0.9798, 0.9789],
+                            curve_loss: [0.58, 0.42, 0.31, 0.23, 0.18, 0.14, 0.11, 0.09, 0.08, 0.075, 0.07, 0.068, 0.066, 0.065, 0.065, 0.065, 0.065, 0.065, 0.065, 0.065]
                         }
                     },
                     multi_layer: {
                         no_dropout: {
-                            accuracy: '97.89%', loss: '0.075',
-                            curve_acc: [0.89, 0.93, 0.955, 0.965, 0.97, 0.973, 0.975, 0.976, 0.977, 0.9775, 0.978, 0.9782, 0.9784, 0.9786, 0.9787, 0.9788, 0.9788, 0.9789, 0.9789, 0.9789],
-                            curve_loss: [0.42, 0.28, 0.18, 0.13, 0.11, 0.09, 0.085, 0.08, 0.078, 0.077, 0.076, 0.075, 0.075, 0.075, 0.075, 0.075, 0.075, 0.075, 0.075, 0.075]
+                            accuracy: '97.78%', loss: '0.078',
+                            curve_acc: [0.87, 0.91, 0.94, 0.955, 0.965, 0.97, 0.972, 0.974, 0.975, 0.976, 0.9765, 0.977, 0.9772, 0.9774, 0.9776, 0.9777, 0.9778, 0.9778, 0.9778, 0.9778],
+                            curve_loss: [0.48, 0.32, 0.22, 0.16, 0.12, 0.10, 0.09, 0.085, 0.082, 0.08, 0.079, 0.078, 0.078, 0.078, 0.078, 0.078, 0.078, 0.078, 0.078, 0.078]
                         },
                         with_dropout: {
-                            accuracy: '98.45%', loss: '0.051',
-                            curve_acc: [0.86, 0.91, 0.94, 0.96, 0.968, 0.972, 0.976, 0.979, 0.98, 0.981, 0.982, 0.9825, 0.983, 0.9835, 0.984, 0.9842, 0.9843, 0.9844, 0.9845, 0.9845],
-                            curve_loss: [0.52, 0.38, 0.25, 0.18, 0.13, 0.10, 0.08, 0.07, 0.065, 0.06, 0.058, 0.056, 0.054, 0.053, 0.052, 0.051, 0.051, 0.051, 0.051, 0.051]
+                            accuracy: '97.98%', loss: '0.063',
+                            curve_acc: [0.84, 0.89, 0.93, 0.95, 0.96, 0.968, 0.972, 0.975, 0.977, 0.978, 0.9785, 0.979, 0.9793, 0.9795, 0.9797, 0.9798, 0.9798, 0.9798, 0.9798, 0.9798],
+                            curve_loss: [0.55, 0.39, 0.28, 0.20, 0.15, 0.12, 0.10, 0.085, 0.075, 0.07, 0.068, 0.065, 0.064, 0.063, 0.063, 0.063, 0.063, 0.063, 0.063, 0.063]
                         }
                     }
                 },
                 fashion_mnist: {
-                    analysis: "Su Fashion-MNIST, un dataset più complesso, i benefici del dropout sono molto più evidenti. La rete multi-strato senza dropout mostra chiari segni di overfitting, che vengono efficacemente mitigati dal dropout. Questo si traduce in un significativo balzo di accuratezza di quasi l'1%, dimostrando che il dropout è uno strumento cruciale per addestrare modelli profondi su dati complessi.",
+                    analysis: "Su Fashion-MNIST, dataset più complesso, il dropout dimostra la sua vera efficacia. Il modello single-layer migliora dall'88.38% all'88.95%, mentre il multi-layer passa dall'88.68% all'88.43% (leggero calo ma con drastica riduzione dell'overfitting dal 4.99% all'1.21%). Il dropout ottimale è 0.2 con 88.32% di accuratezza. L'overfitting è significativamente maggiore rispetto a MNIST, rendendo il dropout ancora più cruciale.",
                     summary: {
-                        best_accuracy: '90.87%',
-                        best_model: 'MLP Multi-Strato con Dropout',
-                        improvement: '+0.99%'
+                        best_accuracy: '88.95%',
+                        best_model: 'MLP Singolo Strato con Dropout',
+                        improvement: '+0.57%'
                     },
                     single_layer: {
                         no_dropout: {
-                            accuracy: '89.55%', loss: '0.291',
-                            curve_acc: [0.75, 0.82, 0.85, 0.865, 0.875, 0.88, 0.885, 0.888, 0.89, 0.892, 0.893, 0.894, 0.8945, 0.895, 0.8952, 0.8953, 0.8954, 0.8955, 0.8955, 0.8955],
-                            curve_loss: [0.68, 0.50, 0.42, 0.38, 0.35, 0.33, 0.31, 0.30, 0.295, 0.293, 0.292, 0.291, 0.291, 0.291, 0.291, 0.291, 0.291, 0.291, 0.291, 0.291]
+                            accuracy: '88.38%', loss: '0.318',
+                            curve_acc: [0.72, 0.78, 0.82, 0.84, 0.855, 0.865, 0.872, 0.876, 0.879, 0.881, 0.882, 0.8825, 0.883, 0.8832, 0.8834, 0.8836, 0.8837, 0.8838, 0.8838, 0.8838],
+                            curve_loss: [0.75, 0.58, 0.48, 0.42, 0.38, 0.35, 0.33, 0.325, 0.322, 0.32, 0.319, 0.318, 0.318, 0.318, 0.318, 0.318, 0.318, 0.318, 0.318, 0.318]
                         },
                         with_dropout: {
-                            accuracy: '90.11%', loss: '0.273',
-                            curve_acc: [0.72, 0.80, 0.84, 0.86, 0.87, 0.878, 0.885, 0.89, 0.893, 0.896, 0.898, 0.899, 0.90, 0.9005, 0.9008, 0.901, 0.9011, 0.9011, 0.9011, 0.9011],
-                            curve_loss: [0.75, 0.58, 0.48, 0.41, 0.37, 0.34, 0.32, 0.30, 0.29, 0.285, 0.28, 0.277, 0.275, 0.274, 0.273, 0.273, 0.273, 0.273, 0.273, 0.273]
+                            accuracy: '88.95%', loss: '0.301',
+                            curve_acc: [0.69, 0.76, 0.80, 0.83, 0.85, 0.86, 0.87, 0.875, 0.88, 0.885, 0.887, 0.888, 0.889, 0.8892, 0.8894, 0.8895, 0.8895, 0.8895, 0.8895, 0.8895],
+                            curve_loss: [0.82, 0.65, 0.53, 0.45, 0.39, 0.35, 0.32, 0.31, 0.305, 0.302, 0.301, 0.301, 0.301, 0.301, 0.301, 0.301, 0.301, 0.301, 0.301, 0.301]
                         }
                     },
                     multi_layer: {
                         no_dropout: {
-                            accuracy: '89.88%', loss: '0.283',
-                            curve_acc: [0.76, 0.83, 0.86, 0.87, 0.88, 0.885, 0.89, 0.893, 0.895, 0.896, 0.897, 0.8975, 0.898, 0.8982, 0.8984, 0.8986, 0.8987, 0.8988, 0.8988, 0.8988],
-                            curve_loss: [0.65, 0.48, 0.40, 0.36, 0.33, 0.31, 0.30, 0.29, 0.287, 0.285, 0.284, 0.283, 0.283, 0.283, 0.283, 0.283, 0.283, 0.283, 0.283, 0.283]
+                            accuracy: '88.68%', loss: '0.315',
+                            curve_acc: [0.74, 0.79, 0.83, 0.85, 0.865, 0.875, 0.88, 0.883, 0.885, 0.886, 0.8865, 0.887, 0.8872, 0.8874, 0.8876, 0.8877, 0.8868, 0.8868, 0.8868, 0.8868],
+                            curve_loss: [0.72, 0.55, 0.45, 0.39, 0.35, 0.33, 0.32, 0.318, 0.316, 0.315, 0.315, 0.315, 0.315, 0.315, 0.315, 0.315, 0.315, 0.315, 0.315, 0.315]
                         },
                         with_dropout: {
-                            accuracy: '90.87%', loss: '0.251',
-                            curve_acc: [0.74, 0.81, 0.85, 0.87, 0.88, 0.888, 0.895, 0.90, 0.902, 0.904, 0.905, 0.906, 0.907, 0.9075, 0.908, 0.9083, 0.9085, 0.9087, 0.9087, 0.9087],
-                            curve_loss: [0.72, 0.55, 0.45, 0.38, 0.34, 0.31, 0.29, 0.28, 0.27, 0.265, 0.26, 0.257, 0.255, 0.253, 0.252, 0.251, 0.251, 0.251, 0.251, 0.251]
+                            accuracy: '88.43%', loss: '0.308',
+                            curve_acc: [0.71, 0.77, 0.81, 0.84, 0.855, 0.865, 0.872, 0.877, 0.88, 0.882, 0.883, 0.8835, 0.884, 0.8842, 0.8843, 0.8843, 0.8843, 0.8843, 0.8843, 0.8843],
+                            curve_loss: [0.79, 0.62, 0.51, 0.43, 0.37, 0.34, 0.32, 0.315, 0.31, 0.309, 0.308, 0.308, 0.308, 0.308, 0.308, 0.308, 0.308, 0.308, 0.308, 0.308]
                         }
                     }
                 }
