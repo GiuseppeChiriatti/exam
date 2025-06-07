@@ -1,200 +1,564 @@
+# ===================================================================
+# STUDIO DEL DROPOUT COME TECNICA DI REGOLARIZZAZIONE
+# ===================================================================
+# Questo script implementa un esperimento completo per analizzare
+# l'efficacia del dropout nella prevenzione dell'overfitting nelle
+# reti neurali multistrato (MLP - Multi-Layer Perceptron)
+
+# IMPORTAZIONI E MOTIVAZIONI TECNOLOGICHE
+# ===================================================================
+
+# PyTorch: Framework di deep learning scelto per:
+# - Interfaccia Pythonica intuitiva
+# - GPU acceleration nativa
+# - Debugging facilitato (eager execution)
+# - Ecosistema ricco di utilities
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
+import torch.nn as nn           # Moduli neurali pre-definiti
+import torch.optim as optim     # Algoritmi di ottimizzazione
+import torch.nn.functional as F # Funzioni di attivazione e loss
+from torch.utils.data import DataLoader  # Gestione efficiente dei batch
+
+# TorchVision: Estensione per computer vision
+# - Dataset pre-caricati (MNIST, Fashion-MNIST)
+# - Trasformazioni standard per il preprocessing
 import torchvision
 import torchvision.transforms as transforms
-import matplotlib.pyplot as plt
-import numpy as np
-from sklearn.metrics import classification_report, confusion_matrix
-import seaborn as sns
-from collections import defaultdict
-import time
-import os
-from datetime import datetime
-import json
 
-# Impostazione del device e creazione cartelle per i risultati
+# Matplotlib: Libreria di plotting standard Python
+# Scelta per la compatibilità e flessibilità nella visualizzazione
+import matplotlib.pyplot as plt
+
+# NumPy: Calcolo numerico efficiente
+# Indispensabile per operazioni matematiche su array
+import numpy as np
+
+# Scikit-learn: Metriche di valutazione
+# Fornisce classification_report per analisi dettagliate
+from sklearn.metrics import classification_report, confusion_matrix
+
+# Seaborn: Visualizzazioni statistiche avanzate
+# Built on matplotlib, offre plot più eleganti per heatmap
+import seaborn as sns
+
+# Collections: Strutture dati Python avanzate
+# defaultdict per gestire contatori automatici
+from collections import defaultdict
+
+# Moduli standard Python per utilità varie
+import time        # Misurazione tempi di esecuzione
+import os          # Operazioni su filesystem
+from datetime import datetime  # Timestamp per organizzazione file
+import json        # Serializzazione dati per persistenza
+
+# ===================================================================
+# CONFIGURAZIONE HARDWARE E DIRECTORY
+# ===================================================================
+
+# RILEVAMENTO AUTOMATICO DEL DEVICE DI COMPUTAZIONE
+# PyTorch supporta automaticamente GPU NVIDIA se disponibile
+# Fallback su CPU se CUDA non è disponibile
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Utilizzo device: {device}")
 
-# Creazione delle cartelle per salvare i risultati
+# PERCHÉ QUESTA SCELTA:
+# - GPU accelera training di 10-100x rispetto a CPU
+# - torch.cuda.is_available() verifica driver CUDA
+# - Fallback automatico garantisce compatibilità universale
+
 def create_output_directories():
+    """
+    Crea una struttura organizzata di cartelle per i risultati
+    
+    MOTIVAZIONE DELLA STRUTTURA:
+    - Timestamp evita sovrascritture accidentali
+    - Separazione logica per tipo di output
+    - Facilita l'archiviazione e il confronto tra esperimenti
+    
+    Returns:
+        dict: Dizionario con i percorsi delle cartelle create
+    """
+    # Timestamp ISO per ordinamento cronologico naturale
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_dir = f"dropout_study_results_{timestamp}"
     
+    # Struttura gerarchica per organizzazione logica
     directories = {
-        'base': base_dir,
-        'plots': os.path.join(base_dir, 'plots'),
-        'models': os.path.join(base_dir, 'models'),
-        'reports': os.path.join(base_dir, 'reports'),
-        'data': os.path.join(base_dir, 'data')
+        'base': base_dir,                              # Cartella principale
+        'plots': os.path.join(base_dir, 'plots'),      # Grafici e visualizzazioni
+        'models': os.path.join(base_dir, 'models'),    # Stati dei modelli salvati
+        'reports': os.path.join(base_dir, 'reports'),  # Report in formato markdown/PDF
+        'data': os.path.join(base_dir, 'data')         # Dati numerici in JSON
     }
     
+    # Creazione ricorsiva delle directory
+    # exist_ok=True previene errori se le cartelle esistono già
     for dir_path in directories.values():
         os.makedirs(dir_path, exist_ok=True)
     
     return directories
 
-# Inizializzazione delle directory
+# Inizializzazione globale delle directory
 output_dirs = create_output_directories()
 print(f"Risultati salvati in: {output_dirs['base']}")
 
-# Variabile globale per raccogliere informazioni per il report
+# ===================================================================
+# LOGGING E TRACCIABILITÀ DELL'ESPERIMENTO
+# ===================================================================
+
+# Struttura dati per tracciare completamente l'esperimento
+# PERCHÉ È IMPORTANTE:
+# - Riproducibilità scientifica
+# - Debug e analisi post-esperimento
+# - Confronto tra esperimenti diversi
 experiment_log = {
-    'start_time': datetime.now().isoformat(),
-    'device': str(device),
-    'experiments': [],
-    'conclusions': []
+    'start_time': datetime.now().isoformat(),  # ISO 8601 per standard internazionale
+    'device': str(device),                     # Informazioni hardware
+    'experiments': [],                         # Lista degli esperimenti eseguiti
+    'conclusions': []                          # Conclusioni automatiche generate
 }
 
-# Classe MLP con un solo strato nascosto
+# ===================================================================
+# ARCHITETTURE NEURALI IMPLEMENTATE
+# ===================================================================
+
 class MLPSingleHidden(nn.Module):
+    """
+    Multi-Layer Perceptron con un singolo strato nascosto
+    
+    MOTIVAZIONE ARCHITETTUALE:
+    - Semplicità: Baseline per confronti
+    - Interpretabilità: Pochi parametri da analizzare
+    - Velocità: Training rapido per esperimenti
+    
+    PERCHÉ QUESTA IMPLEMENTAZIONE:
+    - Eredita da nn.Module per integrazione PyTorch
+    - Dropout configurabile per esperimenti controllati
+    - ReLU come attivazione (standard moderno)
+    """
+    
     def __init__(self, input_size, hidden_size, num_classes, dropout_rate=0.0):
+        """
+        Inizializzazione dell'architettura
+        
+        Args:
+            input_size (int): Dimensione input (784 per immagini 28x28)
+            hidden_size (int): Neuroni nel layer nascosto
+            num_classes (int): Numero di classi di output (10 per MNIST)
+            dropout_rate (float): Probabilità di dropout [0.0, 1.0]
+        """
         super(MLPSingleHidden, self).__init__()
+        
+        # LAYER LINEARE: trasformazione affine y = xW^T + b
+        # input_size x hidden_size parametri + hidden_size bias
         self.fc1 = nn.Linear(input_size, hidden_size)
+        
+        # DROPOUT LAYER: regolarizzazione stocastica
+        # Durante training: spegne neuroni casualmente con prob. dropout_rate
+        # Durante inference: scala output per compensare
         self.dropout = nn.Dropout(dropout_rate)
+        
+        # OUTPUT LAYER: proiezione verso spazio delle classi
         self.fc2 = nn.Linear(hidden_size, num_classes)
+        
+        # Memorizzazione per analisi successive
         self.dropout_rate = dropout_rate
     
     def forward(self, x):
-        x = x.view(x.size(0), -1)  # Flatten
+        """
+        Forward pass della rete
+        
+        FLUSSO COMPUTAZIONALE:
+        1. Flatten dell'input (immagini -> vettore)
+        2. Trasformazione lineare + attivazione
+        3. Dropout (solo in training mode)
+        4. Classificazione finale
+        
+        Args:
+            x (torch.Tensor): Batch di input [batch_size, channels, height, width]
+            
+        Returns:
+            torch.Tensor: Logits raw [batch_size, num_classes]
+        """
+        # FLATTEN: Converte immagini 2D in vettori 1D
+        # Da [batch_size, 1, 28, 28] a [batch_size, 784]
+        # view(-1, 784) preserva batch_size, flatten il resto
+        x = x.view(x.size(0), -1)
+        
+        # PRIMO LAYER + ATTIVAZIONE
+        # ReLU: f(x) = max(0, x)
+        # - Risolve vanishing gradient problem
+        # - Computazionalmente efficiente
+        # - Sparsità naturale (output nulli)
         x = F.relu(self.fc1(x))
+        
+        # DROPOUT: Regolarizzazione stocastica
+        # In training: randomly sets elements to 0 with prob. dropout_rate
+        # In eval: identity operation (no effect)
         x = self.dropout(x)
+        
+        # OUTPUT LAYER: No attivazione (raw logits)
+        # CrossEntropyLoss applicherà softmax internamente
         x = self.fc2(x)
+        
         return x
 
-# Classe MLP con più strati nascosti
 class MLPMultiHidden(nn.Module):
+    """
+    Multi-Layer Perceptron con più strati nascosti
+    
+    MOTIVAZIONE ARCHITETTUALE:
+    - Maggiore capacità espressiva
+    - Apprendimento di rappresentazioni gerarchiche
+    - Test dell'efficacia del dropout in reti profonde
+    
+    DESIGN PATTERN:
+    - ModuleList per gestione dinamica layer
+    - Dropout uniforme su tutti gli strati
+    - Architettura encoder-like (dimensioni decrescenti)
+    """
+    
     def __init__(self, input_size, hidden_sizes, num_classes, dropout_rate=0.0):
+        """
+        Costruzione dinamica di architettura multi-layer
+        
+        Args:
+            input_size (int): Dimensione input
+            hidden_sizes (list): Lista delle dimensioni dei layer nascosti
+            num_classes (int): Numero classi output
+            dropout_rate (float): Dropout rate uniforme
+        """
         super(MLPMultiHidden, self).__init__()
+        
+        # CONTAINERS DINAMICI PER LAYER
+        # ModuleList: Lista di moduli PyTorch
+        # - Registrazione automatica parametri
+        # - Supporto per GPU migration
+        # - Serializzazione automatica
         self.layers = nn.ModuleList()
         self.dropouts = nn.ModuleList()
         
-        # Primo strato
+        # COSTRUZIONE PRIMO LAYER
+        # Input -> Primo strato nascosto
         self.layers.append(nn.Linear(input_size, hidden_sizes[0]))
         self.dropouts.append(nn.Dropout(dropout_rate))
         
-        # Strati intermedi
+        # COSTRUZIONE STRATI INTERMEDI
+        # Pattern encoder: dimensioni decrescenti
+        # Ogni layer riduce la dimensionalità progressivamente
         for i in range(1, len(hidden_sizes)):
             self.layers.append(nn.Linear(hidden_sizes[i-1], hidden_sizes[i]))
             self.dropouts.append(nn.Dropout(dropout_rate))
         
-        # Strato di output
+        # LAYER DI OUTPUT
+        # Ultimo hidden -> num_classes
         self.output_layer = nn.Linear(hidden_sizes[-1], num_classes)
+        
+        # Memorizzazione configurazione
         self.dropout_rate = dropout_rate
     
     def forward(self, x):
-        x = x.view(x.size(0), -1)  # Flatten
+        """
+        Forward pass multi-layer con dropout
         
+        ARCHITETTURA GENERALE:
+        Input -> [Linear -> ReLU -> Dropout] x N -> Linear -> Output
+        
+        Args:
+            x (torch.Tensor): Input tensor
+            
+        Returns:
+            torch.Tensor: Output logits
+        """
+        # Flatten dell'input per FC layers
+        x = x.view(x.size(0), -1)
+        
+        # ITERAZIONE SU STRATI INTERMEDI
+        # Pattern uniforme: Linear -> ReLU -> Dropout
         for layer, dropout in zip(self.layers, self.dropouts):
-            x = F.relu(layer(x))
+            # Trasformazione lineare
+            x = layer(x)
+            
+            # Attivazione non-lineare
+            # ReLU mantiene gradienti positivi
+            x = F.relu(x)
+            
+            # Regolarizzazione stocastica
+            # Previene co-adaptation tra neuroni
             x = dropout(x)
         
+        # OUTPUT FINALE: Solo trasformazione lineare
+        # No attivazione -> raw logits per CrossEntropyLoss
         x = self.output_layer(x)
+        
         return x
 
-# Funzione per caricare i dataset
+# ===================================================================
+# GESTIONE DATASET E PREPROCESSING
+# ===================================================================
+
 def load_datasets(dataset_name='MNIST', batch_size=128):
+    """
+    Caricamento e preprocessing standardizzato dei dataset
+    
+    SCELTE DI PREPROCESSING:
+    - ToTensor(): PIL Image -> Tensor + normalizzazione [0,1]
+    - Normalize((0.5,), (0.5,)): [0,1] -> [-1,1] per stabilità training
+    
+    PERCHÉ QUESTA NORMALIZZAZIONE:
+    - Centra i dati attorno a 0
+    - Riduce internal covariate shift
+    - Migliora convergenza degli ottimizzatori
+    
+    Args:
+        dataset_name (str): 'MNIST' o 'FashionMNIST'
+        batch_size (int): Dimensione batch per training
+        
+    Returns:
+        tuple: (train_loader, test_loader)
+    """
+    # CATENA DI TRASFORMAZIONI
+    # Compose: Applica trasformazioni in sequenza
     transform = transforms.Compose([
+        # PIL Image -> Tensor float32 + scala [0,1]
         transforms.ToTensor(),
+        
+        # Normalizzazione: (pixel - mean) / std
+        # (0.5,) = media, (0.5,) = std per canale singolo
+        # Risultato: [0,1] -> [-1,1]
         transforms.Normalize((0.5,), (0.5,))
     ])
     
+    # CARICAMENTO CONDIZIONALE DATASET
     if dataset_name == 'MNIST':
+        # MNIST: Cifre scritte a mano 0-9
+        # 60k training, 10k test, 28x28 grayscale
         train_dataset = torchvision.datasets.MNIST(
-            root='./data', train=True, download=True, transform=transform
+            root='./data',           # Directory cache locale
+            train=True,              # Set di training
+            download=True,           # Download automatico se necessario
+            transform=transform      # Preprocessing pipeline
         )
         test_dataset = torchvision.datasets.MNIST(
-            root='./data', train=False, download=True, transform=transform
+            root='./data',
+            train=False,             # Set di test
+            download=True,
+            transform=transform
         )
     elif dataset_name == 'FashionMNIST':
+        # Fashion-MNIST: Capi abbigliamento
+        # Stesse dimensioni MNIST ma più complesso
+        # 10 categorie: t-shirt, pantaloni, pullover, etc.
         train_dataset = torchvision.datasets.FashionMNIST(
-            root='./data', train=True, download=True, transform=transform
+            root='./data',
+            train=True,
+            download=True,
+            transform=transform
         )
         test_dataset = torchvision.datasets.FashionMNIST(
-            root='./data', train=False, download=True, transform=transform
+            root='./data',
+            train=False,
+            download=True,
+            transform=transform
         )
     
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    # DATALOADER: Gestione efficiente batching
+    # VANTAGGI:
+    # - Caricamento asincrono in background
+    # - Shuffling automatico per training
+    # - Gestione memoria efficiente
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,              # Randomizzazione ordine samples
+        # num_workers=4,           # Parallelizzazione I/O (opzionale)
+        # pin_memory=True          # Ottimizzazione GPU transfer (opzionale)
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False              # Ordine fisso per riproducibilità test
+    )
     
     return train_loader, test_loader
 
-# Funzione di training
+# ===================================================================
+# FUNZIONI DI TRAINING E VALUTAZIONE
+# ===================================================================
+
 def train_model(model, train_loader, criterion, optimizer, num_epochs=10):
-    model.train()
-    train_losses = []
-    train_accuracies = []
+    """
+    Loop di training standardizzato con logging delle metriche
     
-    for epoch in range(num_epochs):
-        running_loss = 0.0
-        correct = 0
-        total = 0
+    ALGORITMO DI TRAINING:
+    1. Forward pass: calcolo predizioni
+    2. Loss computation: confronto con ground truth
+    3. Backward pass: calcolo gradienti via backpropagation
+    4. Optimizer step: aggiornamento pesi
+    5. Logging: raccolta metriche per monitoraggio
+    
+    Args:
+        model: Modello PyTorch da addestrare
+        train_loader: DataLoader per training set
+        criterion: Funzione di loss
+        optimizer: Algoritmo di ottimizzazione
+        num_epochs: Numero di epoche di training
         
+    Returns:
+        tuple: (train_losses, train_accuracies) per plotting
+    """
+    # MODALITÀ TRAINING
+    # Abilita dropout, batch normalization, etc.
+    model.train()
+    
+    # LISTE PER TRACCIAMENTO METRICHE
+    train_losses = []      # Loss media per epoca
+    train_accuracies = []  # Accuracy media per epoca
+    
+    # LOOP PRINCIPALE EPOCHE
+    for epoch in range(num_epochs):
+        # ACCUMULATORI PER STATISTICHE EPOCA
+        running_loss = 0.0  # Somma loss batch
+        correct = 0         # Predizioni corrette
+        total = 0           # Campioni totali processati
+        
+        # LOOP SUI BATCH
         for i, (inputs, labels) in enumerate(train_loader):
+            # TRASFERIMENTO SU DEVICE COMPUTAZIONALE
+            # .to(device) sposta tensori su GPU/CPU
             inputs, labels = inputs.to(device), labels.to(device)
             
+            # AZZERAMENTO GRADIENTI
+            # PyTorch accumula gradienti -> reset necessario
             optimizer.zero_grad()
+            
+            # FORWARD PASS
+            # Calcolo predizioni del modello
             outputs = model(inputs)
+            
+            # CALCOLO LOSS
+            # CrossEntropyLoss combina LogSoftmax + NLLLoss
             loss = criterion(outputs, labels)
+            
+            # BACKWARD PASS
+            # Calcolo gradienti via chain rule
             loss.backward()
+            
+            # OPTIMIZER STEP
+            # Aggiornamento parametri secondo algoritmo scelto
             optimizer.step()
             
-            running_loss += loss.item()
+            # AGGIORNAMENTO STATISTICHE
+            running_loss += loss.item()  # .item() estrae valore scalare
+            
+            # CALCOLO ACCURACY
+            # torch.max restituisce (values, indices)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
         
+        # CALCOLO METRICHE EPOCA
         epoch_loss = running_loss / len(train_loader)
         epoch_acc = 100 * correct / total
+        
+        # SALVATAGGIO METRICHE
         train_losses.append(epoch_loss)
         train_accuracies.append(epoch_acc)
         
+        # LOGGING PERIODICO
+        # Evita spam su console, print ogni 2 epoche
         if (epoch + 1) % 2 == 0:
             print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.2f}%')
     
     return train_losses, train_accuracies
 
-# Funzione di test
 def test_model(model, test_loader):
+    """
+    Valutazione del modello su test set
+    
+    DIFFERENZE DAL TRAINING:
+    - model.eval(): disabilita dropout, batch norm in eval mode
+    - torch.no_grad(): disabilita calcolo gradienti per efficienza
+    - Nessun aggiornamento parametri
+    
+    Args:
+        model: Modello addestrato da valutare
+        test_loader: DataLoader per test set
+        
+    Returns:
+        tuple: (accuracy, average_loss)
+    """
+    # MODALITÀ VALUTAZIONE
+    # Disabilita dropout, fissa batch normalization
     model.eval()
+    
+    # INIZIALIZZAZIONE CONTATORI
     correct = 0
     total = 0
     test_loss = 0
+    
+    # LOSS FUNCTION
+    # Stessa del training per confrontabilità
     criterion = nn.CrossEntropyLoss()
     
+    # CONTEXT MANAGER PER EFFICIENZA
+    # torch.no_grad() disabilita autograd
+    # - Riduce memoria utilizzata
+    # - Accelera computazione
+    # - Previene accumulo gradienti accidentale
     with torch.no_grad():
         for inputs, labels in test_loader:
+            # Device transfer
             inputs, labels = inputs.to(device), labels.to(device)
+            
+            # Forward pass (solo predizione)
             outputs = model(inputs)
+            
+            # Calcolo loss per monitoraggio
             loss = criterion(outputs, labels)
             test_loss += loss.item()
             
+            # Calcolo accuracy
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
     
+    # CALCOLO METRICHE FINALI
     accuracy = 100 * correct / total
     avg_loss = test_loss / len(test_loader)
+    
     return accuracy, avg_loss
 
 # Funzione per confrontare modelli con logging
 def compare_models(dataset_name='MNIST'):
+    """
+    Confronto sistematico di architetture con e senza dropout
+    
+    DESIGN SPERIMENTALE:
+    - Controllo variabili: stessi iperparametri tranne dropout
+    - Quattro configurazioni: Single/Multi x NoDropout/WithDropout
+    - Logging completo per analisi post-hoc
+    
+    PERCHÉ QUESTO DESIGN:
+    - Isolamento effetto dropout da altri fattori
+    - Confronto fair tra architetture
+    - Raccolta dati quantitativi per conclusioni oggettive
+    """
     print(f"\n=== CONFRONTO MODELLI SU {dataset_name} ===")
     
-    # Caricamento dataset
+    # CARICAMENTO DATASET STANDARDIZZATO
     train_loader, test_loader = load_datasets(dataset_name)
     
-    # Parametri
-    input_size = 28 * 28
-    num_classes = 10
-    num_epochs = 15
-    learning_rate = 0.001
+    # IPERPARAMETRI FISSI
+    # Mantenuti costanti per isolamento variabile dropout
+    input_size = 28 * 28    # Flattened MNIST/Fashion-MNIST
+    num_classes = 10        # 10 categorie per entrambi dataset
+    num_epochs = 15         # Abbastanza per convergenza
+    learning_rate = 0.001   # Learning rate conservativo per Adam
     
-    results = {}
-    experiment_info = {
+    # STRUTTURE DATI RISULTATI
+    results = {}            # Risultati numerici per ogni modello
+    experiment_info = {     # Metadati esperimento per report
         'dataset': dataset_name,
         'parameters': {
             'input_size': input_size,
@@ -205,17 +569,37 @@ def compare_models(dataset_name='MNIST'):
         'models': {}
     }
     
-    # 1. MLP singolo strato senza dropout
+    # ===============================================================
+    # ESPERIMENTO 1: MLP SINGOLO STRATO SENZA DROPOUT
+    # ===============================================================
     print("\n1. Training MLP singolo strato SENZA dropout...")
+    
+    # INIZIALIZZAZIONE MODELLO
+    # dropout_rate=0.0 -> no regolarizzazione
     model1 = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.0).to(device)
+    
+    # OTTIMIZZATORE ADAM
+    # PERCHÉ ADAM:
+    # - Adaptive learning rates per parametro
+    # - Momentum + RMSprop combination
+    # - Robusto a scelte iperparametri
+    # - Standard de facto per deep learning
     optimizer1 = optim.Adam(model1.parameters(), lr=learning_rate)
+    
+    # LOSS FUNCTION
+    # CrossEntropyLoss per classificazione multiclasse
+    # Combina LogSoftmax + NLLLoss per stabilità numerica
     criterion = nn.CrossEntropyLoss()
     
+    # TRAINING CON TIMING
     start_time = time.time()
     train_losses1, train_acc1 = train_model(model1, train_loader, criterion, optimizer1, num_epochs)
     training_time1 = time.time() - start_time
     
+    # VALUTAZIONE SU TEST SET
     test_acc1, test_loss1 = test_model(model1, test_loader)
+    
+    # SALVATAGGIO RISULTATI
     results['Single_No_Dropout'] = {
         'train_losses': train_losses1,
         'train_acc': train_acc1,
@@ -225,28 +609,38 @@ def compare_models(dataset_name='MNIST'):
     }
     print(f"Test Accuracy: {test_acc1:.2f}%, Test Loss: {test_loss1:.4f}")
     
-    # Salvataggio modello
+    # PERSISTENZA MODELLO
+    # Salvataggio state_dict per riutilizzo futuro
     model_path = os.path.join(output_dirs['models'], f'{dataset_name.lower()}_single_no_dropout.pth')
     torch.save(model1.state_dict(), model_path)
     
+    # LOGGING PER REPORT
     experiment_info['models']['Single_No_Dropout'] = {
         'architecture': 'Single Hidden Layer (512 neurons)',
         'dropout_rate': 0.0,
         'test_accuracy': test_acc1,
         'training_time': training_time1,
-        'overfitting_gap': train_acc1[-1] - test_acc1
+        'overfitting_gap': train_acc1[-1] - test_acc1  # Misura overfitting
     }
     
-    # 2. MLP singolo strato con dropout
+    # ===============================================================
+    # ESPERIMENTO 2: MLP SINGOLO STRATO CON DROPOUT
+    # ===============================================================
     print("\n2. Training MLP singolo strato CON dropout (0.3)...")
+    
+    # STESSO MODELLO CON DROPOUT
+    # dropout_rate=0.3 -> 30% neuroni spenti casualmente
     model2 = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.3).to(device)
     optimizer2 = optim.Adam(model2.parameters(), lr=learning_rate)
     
+    # TRAINING IDENTICO
     start_time = time.time()
     train_losses2, train_acc2 = train_model(model2, train_loader, criterion, optimizer2, num_epochs)
     training_time2 = time.time() - start_time
     
     test_acc2, test_loss2 = test_model(model2, test_loader)
+    
+    # SALVATAGGIO E LOGGING
     results['Single_With_Dropout'] = {
         'train_losses': train_losses2,
         'train_acc': train_acc2,
@@ -256,7 +650,6 @@ def compare_models(dataset_name='MNIST'):
     }
     print(f"Test Accuracy: {test_acc2:.2f}%, Test Loss: {test_loss2:.4f}")
     
-    # Salvataggio modello
     model_path = os.path.join(output_dirs['models'], f'{dataset_name.lower()}_single_with_dropout.pth')
     torch.save(model2.state_dict(), model_path)
     
@@ -268,8 +661,14 @@ def compare_models(dataset_name='MNIST'):
         'overfitting_gap': train_acc2[-1] - test_acc2
     }
     
-    # 3. MLP multi-strato senza dropout
+    # ===============================================================
+    # ESPERIMENTO 3: MLP MULTI-STRATO SENZA DROPOUT
+    # ===============================================================
     print("\n3. Training MLP multi-strato SENZA dropout...")
+    
+    # ARCHITETTURA ENCODER-LIKE
+    # [512, 256, 128] -> dimensioni decrescenti
+    # MOTIVAZIONE: estrazione features gerarchiche
     model3 = MLPMultiHidden(input_size, [512, 256, 128], num_classes, dropout_rate=0.0).to(device)
     optimizer3 = optim.Adam(model3.parameters(), lr=learning_rate)
     
@@ -278,6 +677,7 @@ def compare_models(dataset_name='MNIST'):
     training_time3 = time.time() - start_time
     
     test_acc3, test_loss3 = test_model(model3, test_loader)
+    
     results['Multi_No_Dropout'] = {
         'train_losses': train_losses3,
         'train_acc': train_acc3,
@@ -287,7 +687,6 @@ def compare_models(dataset_name='MNIST'):
     }
     print(f"Test Accuracy: {test_acc3:.2f}%, Test Loss: {test_loss3:.4f}")
     
-    # Salvataggio modello
     model_path = os.path.join(output_dirs['models'], f'{dataset_name.lower()}_multi_no_dropout.pth')
     torch.save(model3.state_dict(), model_path)
     
@@ -299,8 +698,12 @@ def compare_models(dataset_name='MNIST'):
         'overfitting_gap': train_acc3[-1] - test_acc3
     }
     
-    # 4. MLP multi-strato con dropout
+    # ===============================================================
+    # ESPERIMENTO 4: MLP MULTI-STRATO CON DROPOUT
+    # ===============================================================
     print("\n4. Training MLP multi-strato CON dropout (0.3)...")
+    
+    # STESSA ARCHITETTURA + DROPOUT UNIFORME
     model4 = MLPMultiHidden(input_size, [512, 256, 128], num_classes, dropout_rate=0.3).to(device)
     optimizer4 = optim.Adam(model4.parameters(), lr=learning_rate)
     
@@ -309,6 +712,7 @@ def compare_models(dataset_name='MNIST'):
     training_time4 = time.time() - start_time
     
     test_acc4, test_loss4 = test_model(model4, test_loader)
+    
     results['Multi_With_Dropout'] = {
         'train_losses': train_losses4,
         'train_acc': train_acc4,
@@ -318,7 +722,6 @@ def compare_models(dataset_name='MNIST'):
     }
     print(f"Test Accuracy: {test_acc4:.2f}%, Test Loss: {test_loss4:.4f}")
     
-    # Salvataggio modello
     model_path = os.path.join(output_dirs['models'], f'{dataset_name.lower()}_multi_with_dropout.pth')
     torch.save(model4.state_dict(), model_path)
     
@@ -330,68 +733,113 @@ def compare_models(dataset_name='MNIST'):
         'overfitting_gap': train_acc4[-1] - test_acc4
     }
     
-    # Salvataggio risultati numerici
+    # ===============================================================
+    # PERSISTENZA RISULTATI NUMERICI
+    # ===============================================================
+    
+    # SERIALIZZAZIONE JSON
+    # Conversione numpy arrays -> liste per compatibilità JSON
     results_path = os.path.join(output_dirs['data'], f'results_{dataset_name.lower()}.json')
     with open(results_path, 'w') as f:
-        # Converti i numpy arrays in liste per la serializzazione JSON
         serializable_results = {}
         for model_name, data in results.items():
             serializable_results[model_name] = {
                 'train_losses': [float(x) for x in data['train_losses']],
                 'train_acc': [float(x) for x in data['train_acc']],
                 'test_acc': float(data['test_acc']),
-                'test_loss': float(data['test_loss']),
+                'test_loss': float(data['test_loss']),  
                 'training_time': float(data['training_time'])
             }
         json.dump(serializable_results, f, indent=2)
     
-    # Aggiunta al log dell'esperimento
+    # AGGIORNAMENTO LOG GLOBALE
     experiment_log['experiments'].append(experiment_info)
     
     return results
 
 # Funzione per visualizzare i risultati con salvataggio
 def plot_results(results, dataset_name, save_plots=True):
+    """
+    Visualizzazione completa dei risultati sperimentali
+    
+    DESIGN VISUALIZZAZIONE:
+    - 4 subplot per analisi multidimensionale
+    - Colori distintivi per chiarezza
+    - Annotazioni per interpretazione immediata
+    - Salvataggio alta risoluzione per pubblicazioni
+    
+    TECNOLOGIE UTILIZZATE:
+    - matplotlib.pyplot: Framework plotting standard
+    - subplots(): Layout griglia per confronti
+    - Personalizzazione estetica per professionalità
+    """
+    # SETUP FIGURA PRINCIPALE
+    # figsize in pollici per controllo dimensioni stampa
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
     fig.suptitle(f'Confronto Prestazioni Modelli - {dataset_name}', fontsize=16)
     
-    # Plot 1: Training Loss
+    # ===============================================================
+    # GRAFICO 1: EVOLUZIONE TRAINING LOSS
+    # ===============================================================
     ax1 = axes[0, 0]
+    
+    # PLOT MULTIPLO CON LOOP
+    # Ogni modello = curva diversa
     for model_name, data in results.items():
+        # linewidth=2 per visibilità su stampa
         ax1.plot(data['train_losses'], label=model_name, linewidth=2)
+    
+    # PERSONALIZZAZIONE ASSI E LABELS
     ax1.set_title('Training Loss')
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Loss')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+    ax1.legend()                    # Legenda automatica da labels
+    ax1.grid(True, alpha=0.3)       # Griglia sottile per lettura
     
-    # Plot 2: Training Accuracy
+    # ===============================================================
+    # GRAFICO 2: EVOLUZIONE TRAINING ACCURACY
+    # ===============================================================
     ax2 = axes[0, 1]
+    
     for model_name, data in results.items():
         ax2.plot(data['train_acc'], label=model_name, linewidth=2)
+    
     ax2.set_title('Training Accuracy')
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('Accuracy (%)')
     ax2.legend()
     ax2.grid(True, alpha=0.3)
     
-    # Plot 3: Test Accuracy Comparison
+    # ===============================================================
+    # GRAFICO 3: CONFRONTO TEST ACCURACY (BAR PLOT)
+    # ===============================================================
     ax3 = axes[1, 0]
+    
+    # ESTRAZIONE DATI PER BAR PLOT
     models = list(results.keys())
     test_accs = [results[model]['test_acc'] for model in models]
+    
+    # PALETTE COLORI DISTINTIVA
     colors = ['skyblue', 'lightcoral', 'lightgreen', 'orange']
     bars = ax3.bar(models, test_accs, color=colors)
+    
     ax3.set_title('Test Accuracy Comparison')
     ax3.set_ylabel('Accuracy (%)')
-    ax3.tick_params(axis='x', rotation=45)
+    ax3.tick_params(axis='x', rotation=45)  # Rotazione labels per leggibilità
     
-    # Aggiunta valori sopra le barre
+    # ANNOTAZIONI VALORI SULLE BARRE
+    # Migliora interpretazione immediata
     for bar, acc in zip(bars, test_accs):
         ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5, 
                 f'{acc:.2f}%', ha='center', va='bottom')
     
-    # Plot 4: Overfitting Analysis (Differenza train-test)
+    # ===============================================================
+    # GRAFICO 4: ANALISI OVERFITTING (TRAIN-TEST GAP)
+    # ===============================================================
     ax4 = axes[1, 1]
+    
+    # CALCOLO GAP OVERFITTING
+    # Differenza tra ultima accuracy training e test accuracy
     overfitting = []
     for model_name, data in results.items():
         final_train_acc = data['train_acc'][-1]
@@ -403,17 +851,25 @@ def plot_results(results, dataset_name, save_plots=True):
     ax4.set_title('Overfitting Analysis (Train-Test Gap)')
     ax4.set_ylabel('Accuracy Gap (%)')
     ax4.tick_params(axis='x', rotation=45)
+    
+    # LINEA RIFERIMENTO A ZERO
+    # Evidenzia threshold overfitting
     ax4.axhline(y=0, color='black', linestyle='-', alpha=0.3)
     
-    # Aggiunta valori sopra le barre
+    # ANNOTAZIONI GAP VALUES
     for bar, gap in zip(bars, overfitting):
         ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, 
                 f'{gap:.2f}%', ha='center', va='bottom')
     
+    # LAYOUT OTTIMIZZAZIONE
     plt.tight_layout()
     
-    # Salvataggio del plot
+    # ===============================================================
+    # SALVATAGGIO ALTA RISOLUZIONE
+    # ===============================================================
     if save_plots:
+        # dpi=300 per qualità pubblicazione
+        # bbox_inches='tight' elimina whitespace
         plot_path = os.path.join(output_dirs['plots'], f'model_comparison_{dataset_name.lower()}.png')
         plt.savefig(plot_path, dpi=300, bbox_inches='tight')
         print(f"Plot salvato: {plot_path}")
@@ -422,18 +878,40 @@ def plot_results(results, dataset_name, save_plots=True):
 
 # Funzione per analisi dettagliata del dropout con salvataggio
 def dropout_analysis(dataset_name='MNIST', save_plots=True):
+    """
+    Analisi sistematica dell'effetto di diversi valori di dropout
+    
+    METODOLOGIA SPERIMENTALE:
+    - Range dropout rates: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    - Architettura fissa: Multi-layer per massimizzare effetto
+    - Metriche: accuracy + overfitting gap
+    - Visualizzazione: curve response dropout rate
+    
+    OBIETTIVO:
+    - Identificare dropout rate ottimale per dataset
+    - Quantificare trade-off accuracy vs regolarizzazione
+    - Fornire guidelines empiriche per hyperparameter tuning
+    """
     print(f"\n=== ANALISI DETTAGLIATA DROPOUT SU {dataset_name} ===")
     
+    # CARICAMENTO DATASET
     train_loader, test_loader = load_datasets(dataset_name)
     
+    # RANGE DROPOUT RATES DA TESTARE
+    # MOTIVAZIONE RANGE:
+    # - 0.0: baseline senza regolarizzazione
+    # - 0.1-0.3: range tipico per hidden layers
+    # - 0.4-0.5: dropout aggressivo per comparison
     dropout_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
     results = {}
     
+    # PARAMETRI FISSI
     input_size = 28 * 28
     num_classes = 10
-    num_epochs = 10
+    num_epochs = 10          # Ridotto per speed vs accuracy trade-off
     learning_rate = 0.001
     
+    # METADATI ESPERIMENTO
     dropout_experiment = {
         'dataset': dataset_name,
         'dropout_rates_tested': dropout_rates,
@@ -445,66 +923,88 @@ def dropout_analysis(dataset_name='MNIST', save_plots=True):
         'results': {}
     }
     
+    # ===============================================================
+    #LOOP PRINCIPALE: TEST OGNI DROPOUT RATE
+    # ===============================================================
     for dropout_rate in dropout_rates:
         print(f"\nTesting dropout rate: {dropout_rate}")
         
+        # NUOVO MODELLO PER OGNI RATE
+        # Evita contamination tra esperimenti
         model = MLPMultiHidden(input_size, [512, 256, 128], num_classes, dropout_rate).to(device)
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         criterion = nn.CrossEntropyLoss()
         
+        # TRAINING STANDARDIZZATO
         train_losses, train_acc = train_model(model, train_loader, criterion, optimizer, num_epochs)
         test_acc, test_loss = test_model(model, test_loader)
         
+        # SALVATAGGIO RISULTATI
         results[dropout_rate] = {
-            'train_acc': train_acc[-1],
+            'train_acc': train_acc[-1],        # Final training accuracy
             'test_acc': test_acc,
-            'overfitting': train_acc[-1] - test_acc
+            'overfitting': train_acc[-1] - test_acc  # Gap metric
         }
         
+        # LOGGING STRUTTURATO PER JSON
         dropout_experiment['results'][str(dropout_rate)] = {
             'train_accuracy': float(train_acc[-1]),
             'test_accuracy': float(test_acc),
             'overfitting_gap': float(train_acc[-1] - test_acc)
         }
         
+        # LOGGING IMMEDIATO
         print(f"Train Acc: {train_acc[-1]:.2f}%, Test Acc: {test_acc:.2f}%, Gap: {train_acc[-1] - test_acc:.2f}%")
     
-    # Visualizzazione risultati dropout analysis
+    # ===============================================================
+    # VISUALIZZAZIONE ANALISI DROPOUT
+    # ===============================================================
+    
+    # SETUP FIGURA TRIPLA
+    # 3 subplot per analisi completa
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     fig.suptitle(f'Analisi Dropout - {dataset_name}', fontsize=16)
     
+    # ESTRAZIONE DATI PER PLOTTING
     dropout_vals = list(results.keys())
     train_accs = [results[dr]['train_acc'] for dr in dropout_vals]
     test_accs = [results[dr]['test_acc'] for dr in dropout_vals]
     overfitting = [results[dr]['overfitting'] for dr in dropout_vals]
     
-    # Plot accuracies
-    axes[0].plot(dropout_vals, train_accs, 'o-', label='Train Accuracy', linewidth=2, markersize=8)
-    axes[0].plot(dropout_vals, test_accs, 's-', label='Test Accuracy', linewidth=2, markersize=8)
+    # SUBPLOT 1: TRAIN VS TEST ACCURACY
+    # OBIETTIVO: Visualizzare convergenza curves
+    axes[0].plot(dropout_vals, train_accs, 'o-', label='Train Accuracy', 
+                linewidth=2, markersize=8)
+    axes[0].plot(dropout_vals, test_accs, 's-', label='Test Accuracy', 
+                linewidth=2, markersize=8)
     axes[0].set_xlabel('Dropout Rate')
     axes[0].set_ylabel('Accuracy (%)')
     axes[0].set_title('Effect of Dropout on Accuracy')
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # Plot test accuracy only
+    # SUBPLOT 2: TEST ACCURACY FOCUS
+    # OBIETTIVO: Identificare optimum dropout rate
     axes[1].plot(dropout_vals, test_accs, 'ro-', linewidth=2, markersize=8)
     axes[1].set_xlabel('Dropout Rate')
     axes[1].set_ylabel('Test Accuracy (%)')
     axes[1].set_title('Test Accuracy vs Dropout Rate')
     axes[1].grid(True, alpha=0.3)
     
-    # Plot overfitting
+    # SUBPLOT 3: OVERFITTING ANALYSIS
+    # OBIETTIVO: Quantificare effetto regolarizzazione
     axes[2].plot(dropout_vals, overfitting, 'go-', linewidth=2, markersize=8)
     axes[2].set_xlabel('Dropout Rate')
     axes[2].set_ylabel('Train-Test Gap (%)')
     axes[2].set_title('Overfitting vs Dropout Rate')
+    
+    # LINEA RIFERIMENTO ZERO OVERFITTING
     axes[2].axhline(y=0, color='black', linestyle='--', alpha=0.5)
     axes[2].grid(True, alpha=0.3)
     
     plt.tight_layout()
     
-    # Salvataggio del plot
+    # SALVATAGGIO PLOT
     if save_plots:
         plot_path = os.path.join(output_dirs['plots'], f'dropout_analysis_{dataset_name.lower()}.png')
         plt.savefig(plot_path, dpi=300, bbox_inches='tight')
@@ -512,12 +1012,16 @@ def dropout_analysis(dataset_name='MNIST', save_plots=True):
     
     plt.show()
     
-    # Salvataggio risultati dropout analysis
+    # ===============================================================
+    # PERSISTENZA RISULTATI
+    # ===============================================================
+    
+    # SALVATAGGIO JSON STRUTTURATO
     dropout_results_path = os.path.join(output_dirs['data'], f'dropout_analysis_{dataset_name.lower()}.json')
     with open(dropout_results_path, 'w') as f:
         json.dump(dropout_experiment, f, indent=2)
     
-    # Aggiunta al log dell'esperimento
+    # AGGIORNAMENTO LOG GLOBALE
     experiment_log['experiments'].append({
         'type': 'dropout_analysis',
         'data': dropout_experiment
@@ -822,64 +1326,95 @@ def create_pdf_report(report_path):
 
 # Funzione principale aggiornata con salvataggio completo
 def main():
+    """
+    Funzione principale orchestrazione esperimento completo
+    
+    WORKFLOW SPERIMENTALE:
+    1. Setup iniziale (già fatto in __init__)
+    2. Esperimenti comparativi su MNIST
+    3. Esperimenti comparativi su Fashion-MNIST  
+    4. Analisi dettagliata dropout per entrambi dataset
+    5. Visualizzazioni avanzate e analisi errori
+    6. Generazione report completo
+    7. Summary finale
+    
+    DESIGN PHILOSOPHY:
+    - Modularità: ogni fase è function separata
+    - Logging completo: tracciabilità totale
+    - Salvataggio progressivo: no perdita dati
+    - User feedback: progress reporting
+    """
     print("STUDIO DEL DROPOUT COME TECNICA DI REGOLARIZZAZIONE")
     print("="*60)
     print(f"📁 Tutti i risultati saranno salvati in: {output_dirs['base']}")
     
-    # Confronto su MNIST
+    # ===============================================================
+    # FASE 1: ESPERIMENTI COMPARATIVI MNIST
+    # ===============================================================
     print("\n🔍 Avvio esperimenti su MNIST...")
+    
+    # CONFRONTO 4 MODELLI: Single/Multi x NoDropout/WithDropout
     results_mnist = compare_models('MNIST')
+    
+    # VISUALIZZAZIONE IMMEDIATA PER MONITORAGGIO
     plot_results(results_mnist, 'MNIST', save_plots=True)
     
-    # Confronto su Fashion-MNIST
+    # ===============================================================
+    # FASE 2: ESPERIMENTI COMPARATIVI FASHION-MNIST
+    # ===============================================================
     print("\n🔍 Avvio esperimenti su Fashion-MNIST...")
+    
+    # STESSO PROTOCOLLO SU DATASET PIÙ COMPLESSO
     results_fashion = compare_models('FashionMNIST')
     plot_results(results_fashion, 'Fashion-MNIST', save_plots=True)
     
-    # Analisi dettagliata dropout
+    # ===============================================================
+    # FASE 3: ANALISI SISTEMATICA DROPOUT
+    # ===============================================================
     print("\n📊 Analisi dettagliata dell'effetto del dropout...")
+    
+    # TEST RANGE DROPOUT RATES SU ENTRAMBI DATASET
     dropout_results_mnist = dropout_analysis('MNIST', save_plots=True)
     dropout_results_fashion = dropout_analysis('FashionMNIST', save_plots=True)
     
-    # Creazione del report completo
-    print("\n📝 Generazione report completo...")
-    report_path = create_comprehensive_report(
-        results_mnist, results_fashion, 
-        dropout_results_mnist, dropout_results_fashion
-    )
-    
-    # Tentativo di creare anche il PDF
-    print("\n📄 Tentativo di creazione PDF...")
-    pdf_path = create_pdf_report(report_path)
-      # Visualizzazione campioni predetti
+    # ===============================================================
+    # FASE 4: VISUALIZZAZIONI AVANZATE E ANALISI QUALITATIVA
+    # ===============================================================
     print("\n🖼️ Visualizzazione campioni con predizioni...")
     
-    # Carica i modelli per la visualizzazione
+    # CARICAMENTO DATASET PER VISUALIZZAZIONI
     train_loader_mnist, test_loader_mnist = load_datasets('MNIST')
     train_loader_fashion, test_loader_fashion = load_datasets('FashionMNIST')
     
-    # Crea modelli per la dimostrazione
+    # PARAMETRI MODELLI
     input_size = 28 * 28
     num_classes = 10
     
-    # Modelli MNIST
-    model_mnist_single = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.0).to(device)
-    model_mnist_single_dropout = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.3).to(device)
-    model_mnist_multi = MLPMultiHidden(input_size, [512, 256, 128], num_classes, dropout_rate=0.0).to(device)
-    model_mnist_multi_dropout = MLPMultiHidden(input_size, [512, 256, 128], num_classes, dropout_rate=0.3).to(device)
-    
-    # Carica i pesi dei modelli salvati
+    # ===============================================================
+    # ANALISI QUALITATIVA MNIST
+    # ===============================================================
     try:
+        # RICOSTRUZIONE MODELLI MNIST
+        # Necessario ricreare architetture per load_state_dict
+        model_mnist_single = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.0).to(device)
+        model_mnist_single_dropout = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.3).to(device)
+        model_mnist_multi = MLPMultiHidden(input_size, [512, 256, 128], num_classes, dropout_rate=0.0).to(device)
+        model_mnist_multi_dropout = MLPMultiHidden(input_size, [512, 256, 128], num_classes, dropout_rate=0.3).to(device)
+        
+        # CARICAMENTO PESI SALVATI
+        # state_dict contiene solo parametri, non architettura
         model_mnist_single.load_state_dict(torch.load(os.path.join(output_dirs['models'], 'mnist_single_no_dropout.pth')))
         model_mnist_single_dropout.load_state_dict(torch.load(os.path.join(output_dirs['models'], 'mnist_single_with_dropout.pth')))
         model_mnist_multi.load_state_dict(torch.load(os.path.join(output_dirs['models'], 'mnist_multi_no_dropout.pth')))
         model_mnist_multi_dropout.load_state_dict(torch.load(os.path.join(output_dirs['models'], 'mnist_multi_with_dropout.pth')))
         
-        # Visualizza campioni MNIST
+        # VISUALIZZAZIONI CAMPIONI PREDETTI
+        # Mostra performance qualitativa su esempi reali
         print("📸 Visualizzazione campioni MNIST...")
         visualize_sample_predictions(model_mnist_multi_dropout, test_loader_mnist, 'MNIST', num_samples=12)
         
-        # Confronta modelli MNIST
+        # CONFRONTO PREDIZIONI TRA MODELLI
+        # Analisi comparativa su stessi campioni
         models_dict_mnist = {
             'Single No Dropout': model_mnist_single,
             'Single With Dropout': model_mnist_single_dropout,
@@ -888,34 +1423,40 @@ def main():
         }
         compare_model_predictions(models_dict_mnist, test_loader_mnist, 'MNIST', num_samples=6)
         
-        # Analizza errori MNIST
+        # ANALISI ERRORI TIPICI
+        # Insight su failure modes
         print("❌ Analisi errori MNIST...")
         analyze_model_errors(model_mnist_multi, test_loader_mnist, 'MNIST', num_errors=12)
         
-        # Effetto dropout sulle attivazioni MNIST
+        # EFFETTO DROPOUT SU ATTIVAZIONI NEURONALI
+        # Analisi quantitativa internal representations
         print("🧠 Analisi effetto dropout sulle attivazioni MNIST...")
         visualize_dropout_effect(model_mnist_multi_dropout, model_mnist_multi, test_loader_mnist, 'MNIST')
         
     except FileNotFoundError:
         print("⚠️ Modelli MNIST non trovati, probabilmente il training non è stato completato.")
     
-    # Modelli Fashion-MNIST
+    # ===============================================================
+    # ANALISI QUALITATIVA FASHION-MNIST
+    # ===============================================================
     try:
+        # RICOSTRUZIONE MODELLI FASHION-MNIST
         model_fashion_single = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.0).to(device)
         model_fashion_single_dropout = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.3).to(device)
         model_fashion_multi = MLPMultiHidden(input_size, [512, 256, 128], num_classes, dropout_rate=0.0).to(device)
         model_fashion_multi_dropout = MLPMultiHidden(input_size, [512, 256, 128], num_classes, dropout_rate=0.3).to(device)
         
+        # CARICAMENTO PESI
         model_fashion_single.load_state_dict(torch.load(os.path.join(output_dirs['models'], 'fashionmnist_single_no_dropout.pth')))
         model_fashion_single_dropout.load_state_dict(torch.load(os.path.join(output_dirs['models'], 'fashionmnist_single_with_dropout.pth')))
         model_fashion_multi.load_state_dict(torch.load(os.path.join(output_dirs['models'], 'fashionmnist_multi_no_dropout.pth')))
         model_fashion_multi_dropout.load_state_dict(torch.load(os.path.join(output_dirs['models'], 'fashionmnist_multi_with_dropout.pth')))
         
-        # Visualizza campioni Fashion-MNIST
+        # VISUALIZZAZIONI FASHION-MNIST
         print("👕 Visualizzazione campioni Fashion-MNIST...")
         visualize_sample_predictions(model_fashion_multi_dropout, test_loader_fashion, 'FashionMNIST', num_samples=12)
         
-        # Confronta modelli Fashion-MNIST
+        # CONFRONTI TRA MODELLI
         models_dict_fashion = {
             'Single No Dropout': model_fashion_single,
             'Single With Dropout': model_fashion_single_dropout,
@@ -924,22 +1465,49 @@ def main():
         }
         compare_model_predictions(models_dict_fashion, test_loader_fashion, 'FashionMNIST', num_samples=6)
         
-        # Analizza errori Fashion-MNIST
+        # ANALISI ERRORI
         print("❌ Analisi errori Fashion-MNIST...")
         analyze_model_errors(model_fashion_multi, test_loader_fashion, 'FashionMNIST', num_errors=12)
         
-        # Effetto dropout sulle attivazioni Fashion-MNIST
+        # EFFETTO DROPOUT
         print("🧠 Analisi effetto dropout sulle attivazioni Fashion-MNIST...")
         visualize_dropout_effect(model_fashion_multi_dropout, model_fashion_multi, test_loader_fashion, 'FashionMNIST')
         
     except FileNotFoundError:
         print("⚠️ Modelli Fashion-MNIST non trovati, probabilmente il training non è stato completato.")
     
-    # Creazione di un plot riassuntivo finale
+    # ===============================================================
+    # FASE 5: ANALISI COMPARATIVE E SUMMARY
+    # ===============================================================
+    
+    # PLOT RIASSUNTIVO GLOBALE
+    # Confronto high-level tra tutti esperimenti
     create_summary_plot(results_mnist, results_fashion)
     
-    # Report finale a schermo
+    # REPORT FINALE CONSOLE
+    # Summary quantitativo per quick reference
     print_final_summary(results_mnist, results_fashion, dropout_results_mnist, dropout_results_fashion)
+    
+    # ===============================================================
+    # FASE 6: GENERAZIONE REPORT COMPLETO
+    # ===============================================================
+    
+    print("\n📝 Generazione report completo...")
+    
+    # REPORT MARKDOWN STRUTTURATO
+    # Include analisi, grafici, conclusioni, raccomandazioni
+    report_path = create_comprehensive_report(
+        results_mnist, results_fashion, 
+        dropout_results_mnist, dropout_results_fashion
+    )
+    
+    # TENTATIVO CONVERSIONE PDF
+    print("\n📄 Tentativo di creazione PDF...")
+    pdf_path = create_pdf_report(report_path)
+    
+    # ===============================================================
+    # COMPLETION MESSAGE
+    # ===============================================================
     
     print(f"\n✅ ESPERIMENTO COMPLETATO!")
     print(f"📁 Tutti i file sono disponibili in: {output_dirs['base']}")
@@ -947,612 +1515,6 @@ def main():
     print(f"🤖 Modelli salvati in: {output_dirs['models']}")
     print(f"📝 Report salvato in: {output_dirs['reports']}")
 
-def create_summary_plot(results_mnist, results_fashion):
-    """Crea un grafico riassuntivo finale che confronta tutti i risultati"""
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Riassunto Completo - Studio del Dropout', fontsize=18, fontweight='bold')
-    
-    # Plot 1: Confronto Test Accuracy tra dataset
-    ax1 = axes[0, 0]
-    models = list(results_mnist.keys())
-    mnist_accs = [results_mnist[model]['test_acc'] for model in models]
-    fashion_accs = [results_fashion[model]['test_acc'] for model in models]
-    
-    x = np.arange(len(models))
-    width = 0.35
-    
-    bars1 = ax1.bar(x - width/2, mnist_accs, width, label='MNIST', alpha=0.8, color='skyblue')
-    bars2 = ax1.bar(x + width/2, fashion_accs, width, label='Fashion-MNIST', alpha=0.8, color='lightcoral')
-    
-    ax1.set_xlabel('Modelli')
-    ax1.set_ylabel('Test Accuracy (%)')
-    ax1.set_title('Confronto Test Accuracy tra Dataset')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels([m.replace('_', '\n') for m in models], rotation=0, fontsize=9)
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-    
-    # Aggiunta valori sopra le barre
-    for bar in bars1:
-        height = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width()/2., height + 0.5, f'{height:.1f}%', 
-                ha='center', va='bottom', fontsize=8)
-    for bar in bars2:
-        height = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width()/2., height + 0.5, f'{height:.1f}%', 
-                ha='center', va='bottom', fontsize=8)
-    
-    # Plot 2: Confronto Overfitting Gap
-    ax2 = axes[0, 1]
-    mnist_gaps = [results_mnist[model]['train_acc'][-1] - results_mnist[model]['test_acc'] for model in models]
-    fashion_gaps = [results_fashion[model]['train_acc'][-1] - results_fashion[model]['test_acc'] for model in models]
-    
-    bars1 = ax2.bar(x - width/2, mnist_gaps, width, label='MNIST', alpha=0.8, color='lightgreen')
-    bars2 = ax2.bar(x + width/2, fashion_gaps, width, label='Fashion-MNIST', alpha=0.8, color='orange')
-    
-    ax2.set_xlabel('Modelli')
-    ax2.set_ylabel('Overfitting Gap (%)')
-    ax2.set_title('Confronto Overfitting (Train-Test Gap)')
-    ax2.set_xticks(x)
-    ax2.set_xticklabels([m.replace('_', '\n') for m in models], rotation=0, fontsize=9)
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    ax2.axhline(y=0, color='black', linestyle='--', alpha=0.5)
-    
-    # Plot 3: Efficacia Dropout (differenza con/senza)
-    ax3 = axes[1, 0]
-    dropout_effect_mnist = []
-    dropout_effect_fashion = []
-    
-    for arch in ['Single', 'Multi']:
-        no_dropout = f'{arch}_No_Dropout'
-        with_dropout = f'{arch}_With_Dropout'
-        
-        if no_dropout in results_mnist and with_dropout in results_mnist:
-            effect_mnist = (results_mnist[no_dropout]['train_acc'][-1] - results_mnist[no_dropout]['test_acc']) - \
-                          (results_mnist[with_dropout]['train_acc'][-1] - results_mnist[with_dropout]['test_acc'])
-            dropout_effect_mnist.append(effect_mnist)
-            
-            effect_fashion = (results_fashion[no_dropout]['train_acc'][-1] - results_fashion[no_dropout]['test_acc']) - \
-                           (results_fashion[with_dropout]['train_acc'][-1] - results_fashion[with_dropout]['test_acc'])
-            dropout_effect_fashion.append(effect_fashion)
-    
-    arch_labels = ['Single Layer', 'Multi Layer']
-    x_arch = np.arange(len(arch_labels))
-    
-    bars1 = ax3.bar(x_arch - width/2, dropout_effect_mnist, width, label='MNIST', alpha=0.8, color='gold')
-    bars2 = ax3.bar(x_arch + width/2, dropout_effect_fashion, width, label='Fashion-MNIST', alpha=0.8, color='purple')
-    
-    ax3.set_xlabel('Architettura')
-    ax3.set_ylabel('Riduzione Overfitting (%)')
-    ax3.set_title('Efficacia del Dropout nel Ridurre Overfitting')
-    ax3.set_xticks(x_arch)
-    ax3.set_xticklabels(arch_labels)
-    ax3.legend()
-    ax3.grid(True, alpha=0.3)
-    
-    # Plot 4: Training Time Comparison
-    ax4 = axes[1, 1]
-    mnist_times = [results_mnist[model]['training_time'] for model in models]
-    fashion_times = [results_fashion[model]['training_time'] for model in models]
-    
-    bars1 = ax4.bar(x - width/2, mnist_times, width, label='MNIST', alpha=0.8, color='cyan')
-    bars2 = ax4.bar(x + width/2, fashion_times, width, label='Fashion-MNIST', alpha=0.8, color='magenta')
-    
-    ax4.set_xlabel('Modelli')
-    ax4.set_ylabel('Training Time (s)')
-    ax4.set_title('Confronto Tempi di Training')
-    ax4.set_xticks(x)
-    ax4.set_xticklabels([m.replace('_', '\n') for m in models], rotation=0, fontsize=9)
-    ax4.legend()
-    ax4.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    
-    # Salvataggio del plot riassuntivo
-    summary_plot_path = os.path.join(output_dirs['plots'], 'summary_comparison.png')
-    plt.savefig(summary_plot_path, dpi=300, bbox_inches='tight')
-    print(f"📊 Grafico riassuntivo salvato: {summary_plot_path}")
-    
-    plt.show()
-
-def print_final_summary(results_mnist, results_fashion, dropout_mnist, dropout_fashion):
-    """Stampa un riassunto finale dettagliato"""
-    
-    print("\n" + "="*80)
-    print("🎯 RIASSUNTO FINALE - STUDIO DEL DROPOUT")
-    print("="*80)
-    
-    print("\n📊 PRESTAZIONI PRINCIPALI:")
-    print("-" * 50)
-    
-    # Migliori modelli per ogni dataset
-    best_mnist = max(results_mnist.items(), key=lambda x: x[1]['test_acc'])
-    best_fashion = max(results_fashion.items(), key=lambda x: x[1]['test_acc'])
-    
-    print(f"🏆 MNIST - Miglior modello: {best_mnist[0]} ({best_mnist[1]['test_acc']:.2f}%)")
-    print(f"🏆 Fashion-MNIST - Miglior modello: {best_fashion[0]} ({best_fashion[1]['test_acc']:.2f}%)")
-    
-    # Effetto del dropout
-    print(f"\n💡 EFFICACIA DEL DROPOUT:")
-    print("-" * 50)
-    
-    # Calcolo riduzione overfitting media
-    no_dropout_gaps_mnist = [data['train_acc'][-1] - data['test_acc'] 
-                            for k, data in results_mnist.items() if 'No_Dropout' in k]
-    with_dropout_gaps_mnist = [data['train_acc'][-1] - data['test_acc'] 
-                              for k, data in results_mnist.items() if 'With_Dropout' in k]
-    
-    avg_reduction_mnist = np.mean(no_dropout_gaps_mnist) - np.mean(with_dropout_gaps_mnist)
-    
-    no_dropout_gaps_fashion = [data['train_acc'][-1] - data['test_acc'] 
-                              for k, data in results_fashion.items() if 'No_Dropout' in k]
-    with_dropout_gaps_fashion = [data['train_acc'][-1] - data['test_acc'] 
-                                for k, data in results_fashion.items() if 'With_Dropout' in k]
-    
-    avg_reduction_fashion = np.mean(no_dropout_gaps_fashion) - np.mean(with_dropout_gaps_fashion)
-    
-    print(f"📉 Riduzione overfitting MNIST: {avg_reduction_mnist:.2f}% in media")
-    print(f"📉 Riduzione overfitting Fashion-MNIST: {avg_reduction_fashion:.2f}% in media")
-    
-    # Dropout ottimale
-    best_dropout_mnist = max(dropout_mnist.items(), key=lambda x: x[1]['test_acc'])
-    best_dropout_fashion = max(dropout_fashion.items(), key=lambda x: x[1]['test_acc'])
-    
-    print(f"🎯 Dropout ottimale MNIST: {best_dropout_mnist[0]} ({best_dropout_mnist[1]['test_acc']:.2f}%)")
-    print(f"🎯 Dropout ottimale Fashion-MNIST: {best_dropout_fashion[0]} ({best_dropout_fashion[1]['test_acc']:.2f}%)")
-    
-    print(f"\n🏁 CONCLUSIONI CHIAVE:")
-    print("-" * 50)
-    print("✅ Il dropout è efficace nel ridurre l'overfitting")
-    print("✅ L'effetto è più pronunciato su reti più profonde")
-    print("✅ Fashion-MNIST richiede più regolarizzazione di MNIST")
-    print("✅ Il dropout ottimale è dataset-dipendente")
-    print("✅ Il trade-off accuracy vs generalizzazione è gestibile")
-    
-    print(f"\n📁 Tutti i file sono disponibili in: {output_dirs['base']}")
-    print("="*80)
-
-# Funzione per visualizzare campioni con predizioni
-def visualize_sample_predictions(model, test_loader, dataset_name='MNIST', num_samples=12, save_plots=True):
-    """
-    Visualizza campioni del dataset con le relative predizioni del modello
-    
-    Args:
-        model: Modello PyTorch addestrato
-        test_loader: DataLoader per il test set
-        dataset_name: Nome del dataset ('MNIST' o 'FashionMNIST')
-        num_samples: Numero di campioni da visualizzare
-        save_plots: Se salvare i plot o meno
-    """
-    model.eval()
-    
-    # Etichette per Fashion-MNIST
-    fashion_labels = {
-        0: 'T-shirt/top', 1: 'Trouser', 2: 'Pullover', 3: 'Dress', 4: 'Coat',
-        5: 'Sandal', 6: 'Shirt', 7: 'Sneaker', 8: 'Bag', 9: 'Ankle boot'
-    }
-    
-    # Etichette per MNIST
-    mnist_labels = {i: str(i) for i in range(10)}
-    
-    labels_dict = fashion_labels if dataset_name == 'FashionMNIST' else mnist_labels
-    
-    # Raccolta di campioni
-    samples = []
-    predictions = []
-    true_labels = []
-    probabilities = []
-    
-    with torch.no_grad():
-        for inputs, labels in test_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            probs = F.softmax(outputs, dim=1)
-            _, predicted = torch.max(outputs, 1)
-            
-            # Converti in CPU per la visualizzazione
-            inputs_cpu = inputs.cpu()
-            predicted_cpu = predicted.cpu()
-            labels_cpu = labels.cpu()
-            probs_cpu = probs.cpu()
-            
-            for i in range(min(len(inputs), num_samples - len(samples))):
-                samples.append(inputs_cpu[i])
-                predictions.append(predicted_cpu[i])
-                true_labels.append(labels_cpu[i])
-                probabilities.append(probs_cpu[i])
-            
-            if len(samples) >= num_samples:
-                break
-    
-    # Visualizzazione
-    fig, axes = plt.subplots(3, 4, figsize=(16, 12))
-    fig.suptitle(f'Predizioni del Modello - {dataset_name}', fontsize=16)
-    
-    for idx, ax in enumerate(axes.flat):
-        if idx < len(samples):
-            # Mostra l'immagine
-            img = samples[idx].squeeze()
-            ax.imshow(img, cmap='gray')
-            
-            # Prepara le etichette
-            true_label = true_labels[idx].item()
-            pred_label = predictions[idx].item()
-            confidence = probabilities[idx][pred_label].item() * 100
-            
-            true_name = labels_dict[true_label]
-            pred_name = labels_dict[pred_label]
-            
-            # Colore del titolo (verde se corretto, rosso se sbagliato)
-            color = 'green' if true_label == pred_label else 'red'
-            
-            # Titolo con vera etichetta e predizione
-            title = f'True: {true_name}\nPred: {pred_name}\nConf: {confidence:.1f}%'
-            ax.set_title(title, fontsize=10, color=color, weight='bold')
-            
-            ax.axis('off')
-        else:
-            ax.axis('off')
-    
-    plt.tight_layout()
-    
-    # Salvataggio del plot
-    if save_plots:
-        model_name = f"{type(model).__name__}_{dataset_name.lower()}"
-        plot_path = os.path.join(output_dirs['plots'], f'sample_predictions_{model_name}.png')
-        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-        print(f"📸 Campioni salvati: {plot_path}")
-    
-    plt.show()
-    
-    return samples, predictions, true_labels, probabilities
-
-# Funzione per confrontare predizioni di più modelli
-def compare_model_predictions(models_dict, test_loader, dataset_name='MNIST', num_samples=8, save_plots=True):
-    """
-    Confronta le predizioni di più modelli sugli stessi campioni
-    
-    Args:
-        models_dict: Dizionario {nome_modello: modello}
-        test_loader: DataLoader per il test set
-        dataset_name: Nome del dataset
-        num_samples: Numero di campioni da confrontare
-        save_plots: Se salvare i plot o meno
-    """
-    # Etichette
-    fashion_labels = {
-        0: 'T-shirt', 1: 'Trouser', 2: 'Pullover', 3: 'Dress', 4: 'Coat',
-        5: 'Sandal', 6: 'Shirt', 7: 'Sneaker', 8: 'Bag', 9: 'Boot'
-    }
-    mnist_labels = {i: str(i) for i in range(10)}
-    labels_dict = fashion_labels if dataset_name == 'FashionMNIST' else mnist_labels
-    
-    # Raccolta campioni fissi
-    samples = []
-    true_labels = []
-    
-    with torch.no_grad():
-        for inputs, labels in test_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            
-            for i in range(min(len(inputs), num_samples)):
-                samples.append(inputs[i].cpu())
-                true_labels.append(labels[i].cpu())
-            
-            if len(samples) >= num_samples:
-                break
-    
-    # Ottieni predizioni per ogni modello
-    all_predictions = {}
-    all_confidences = {}
-    
-    for model_name, model in models_dict.items():
-        model.eval()
-        predictions = []
-        confidences = []
-        
-        with torch.no_grad():
-            for sample in samples:
-                sample_batch = sample.unsqueeze(0).to(device)
-                output = model(sample_batch)
-                prob = F.softmax(output, dim=1)
-                _, pred = torch.max(output, 1)
-                
-                predictions.append(pred.cpu().item())
-                confidences.append(prob.cpu().squeeze()[pred.item()].item() * 100)
-        
-        all_predictions[model_name] = predictions
-        all_confidences[model_name] = confidences
-    
-    # Visualizzazione comparativa
-    num_models = len(models_dict)
-    fig, axes = plt.subplots(num_samples, num_models + 1, figsize=(4 * (num_models + 1), 3 * num_samples))
-    fig.suptitle(f'Confronto Predizioni Modelli - {dataset_name}', fontsize=16)
-    
-    if num_samples == 1:
-        axes = axes.reshape(1, -1)
-    
-    for sample_idx in range(num_samples):
-        # Prima colonna: immagine originale
-        img = samples[sample_idx].squeeze()
-        axes[sample_idx, 0].imshow(img, cmap='gray')
-        true_label = true_labels[sample_idx].item()
-        axes[sample_idx, 0].set_title(f'Original\nTrue: {labels_dict[true_label]}', 
-                                     fontsize=10, weight='bold')
-        axes[sample_idx, 0].axis('off')
-        
-        # Altre colonne: predizioni dei modelli
-        for model_idx, (model_name, predictions) in enumerate(all_predictions.items()):
-            col_idx = model_idx + 1;
-            
-            pred_label = predictions[sample_idx];
-            confidence = all_confidences[model_name][sample_idx];
-            pred_name = labels_dict[pred_label];
-            
-            # Colore basato su correttezza
-            color = 'green' if pred_label == true_label else 'red'
-            
-            # Mostra l'immagine con la predizione
-            axes[sample_idx, col_idx].imshow(img, cmap='gray')
-            axes[sample_idx, col_idx].set_title(f'{model_name}\nPred: {pred_name}\nConf: {confidence:.1f}%', 
-                                              fontsize=9, color=color, weight='bold')
-            axes[sample_idx, col_idx].axis('off')
-    
-    plt.tight_layout()
-    
-    # Salvataggio del plot
-    if save_plots:
-        plot_path = os.path.join(output_dirs['plots'], f'model_comparison_predictions_{dataset_name.lower()}.png')
-        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-        print(f"🔍 Confronto predizioni salvato: {plot_path}")
-    
-    plt.show()
-    
-    return all_predictions, all_confidences
-
-# Funzione per analizzare errori del modello
-def analyze_model_errors(model, test_loader, dataset_name='MNIST', num_errors=12, save_plots=True):
-    """
-    Analizza e visualizza gli errori più comuni del modello
-    
-    Args:
-        model: Modello PyTorch addestrato
-        test_loader: DataLoader per il test set
-        dataset_name: Nome del dataset
-        num_errors: Numero di errori da visualizzare
-        save_plots: Se salvare i plot o meno
-    """
-    model.eval()
-    
-    # Etichette
-    fashion_labels = {
-        0: 'T-shirt/top', 1: 'Trouser', 2: 'Pullover', 3: 'Dress', 4: 'Coat',
-        5: 'Sandal', 6: 'Shirt', 7: 'Sneaker', 8: 'Bag', 9: 'Ankle boot'
-    }
-    mnist_labels = {i: str(i) for i in range(10)}
-    labels_dict = fashion_labels if dataset_name == 'FashionMNIST' else mnist_labels
-    
-    # Raccolta degli errori
-    errors = []
-    
-    with torch.no_grad():
-        for inputs, labels in test_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            probs = F.softmax(outputs, dim=1)
-            _, predicted = torch.max(outputs, 1)
-            
-            # Trova errori
-            incorrect_mask = predicted != labels
-            
-            if incorrect_mask.any():
-                incorrect_inputs = inputs[incorrect_mask]
-                incorrect_labels = labels[incorrect_mask]
-                incorrect_preds = predicted[incorrect_mask]
-                incorrect_probs = probs[incorrect_mask]
-                
-                for i in range(len(incorrect_inputs)):
-                    if len(errors) < num_errors:
-                        errors.append({
-                            'image': incorrect_inputs[i].cpu(),
-                            'true_label': incorrect_labels[i].cpu().item(),
-                            'pred_label': incorrect_preds[i].cpu().item(),
-                            'confidence': incorrect_probs[i][incorrect_preds[i]].cpu().item() * 100,
-                            'true_prob': incorrect_probs[i][incorrect_labels[i]].cpu().item() * 100
-                        })
-            
-            if len(errors) >= num_errors:
-                break
-    
-    # Visualizzazione degli errori
-    if errors:
-        fig, axes = plt.subplots(3, 4, figsize=(16, 12))
-        fig.suptitle(f'Analisi Errori del Modello - {dataset_name}', fontsize=16)
-        
-        for idx, ax in enumerate(axes.flat):
-            if idx < len(errors):
-                error = errors[idx]
-                
-                # Mostra l'immagine
-                img = error['image'].squeeze()
-                ax.imshow(img, cmap='gray')
-                
-                # Informazioni sull'errore
-                true_name = labels_dict[error['true_label']]
-                pred_name = labels_dict[error['pred_label']]
-                
-                title = f'True: {true_name} ({error["true_prob"]:.1f}%)\n'
-                title += f'Pred: {pred_name} ({error["confidence"]:.1f}%)'
-                
-                ax.set_title(title, fontsize=10, color='red', weight='bold')
-                ax.axis('off')
-            else:
-                ax.axis('off')
-        
-        plt.tight_layout()
-        
-        # Salvataggio del plot
-        if save_plots:
-            model_name = f"{type(model).__name__}_{dataset_name.lower()}"
-            plot_path = os.path.join(output_dirs['plots'], f'error_analysis_{model_name}.png')
-            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-            print(f"❌ Analisi errori salvata: {plot_path}")
-        
-        plt.show()
-    else:
-        print("🎉 Nessun errore trovato nei campioni analizzati!")
-    
-    return errors
-
-# Funzione per visualizzare l'effetto del dropout su attivazioni
-def visualize_dropout_effect(model_with_dropout, model_without_dropout, test_loader, dataset_name='MNIST', save_plots=True):
-    """
-    Visualizza l'effetto del dropout sulle attivazioni del modello
-    
-    Args:
-        model_with_dropout: Modello con dropout
-        model_without_dropout: Modello senza dropout
-        test_loader: DataLoader per il test set
-        dataset_name: Nome del dataset
-        save_plots: Se salvare i plot o meno
-    """
-    # Funzione hook per catturare attivazioni
-    activations_with = {}
-    activations_without = {}
-    
-    def get_activation(name, storage):
-        def hook(model, input, output):
-            storage[name] = output.detach()
-        return hook
-    
-    # Registra hooks per il primo strato nascosto
-    if hasattr(model_with_dropout, 'fc1'):
-        model_with_dropout.fc1.register_forward_hook(get_activation('fc1', activations_with))
-    elif hasattr(model_with_dropout, 'layers'):
-        model_with_dropout.layers[0].register_forward_hook(get_activation('fc1', activations_with))
-    
-    if hasattr(model_without_dropout, 'fc1'):
-        model_without_dropout.fc1.register_forward_hook(get_activation('fc1', activations_without))
-    elif hasattr(model_without_dropout, 'layers'):
-        model_without_dropout.layers[0].register_forward_hook(get_activation('fc1', activations_without))
-    
-    # Ottieni un batch di test
-    inputs, labels = next(iter(test_loader))
-    inputs = inputs.to(device)
-    
-    # Forward pass
-    model_with_dropout.train()  # Per attivare il dropout
-    model_without_dropout.eval()
-    
-    with torch.no_grad():
-        _ = model_with_dropout(inputs[:1])  # Solo un campione
-        _ = model_without_dropout(inputs[:1])
-    
-    # Confronta le attivazioni
-    if 'fc1' in activations_with and 'fc1' in activations_without:
-        act_with = activations_with['fc1'][0].cpu().numpy()
-        act_without = activations_without['fc1'][0].cpu().numpy()
-        
-        # GRAFICO NORMALE (scala lineare)
-        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-        fig.suptitle(f'Effetto del Dropout sulle Attivazioni - {dataset_name}', fontsize=16)
-        
-        # Attivazioni senza dropout
-        axes[0].hist(act_without, bins=50, alpha=0.7, color='blue', density=True)
-        axes[0].set_title('Attivazioni SENZA Dropout')
-        axes[0].set_xlabel('Valore Attivazione')
-        axes[0].set_ylabel('Densità')
-        axes[0].grid(True, alpha=0.3)
-        
-        # Attivazioni con dropout
-        axes[1].hist(act_with, bins=50, alpha=0.7, color='red', density=True)
-        axes[1].set_title('Attivazioni CON Dropout')
-        axes[1].set_xlabel('Valore Attivazione')
-        axes[1].set_ylabel('Densità')
-        axes[1].grid(True, alpha=0.3)
-        
-        # Confronto sovrapposto
-        axes[2].hist(act_without, bins=50, alpha=0.5, color='blue', density=True, label='Senza Dropout')
-        axes[2].hist(act_with, bins=50, alpha=0.5, color='red', density=True, label='Con Dropout')
-        axes[2].set_title('Confronto Attivazioni')
-        axes[2].set_xlabel('Valore Attivazione')
-        axes[2].set_ylabel('Densità')
-        axes[2].legend()
-        axes[2].grid(True, alpha=0.3)
-        
-        plt.tight_layout()
-        
-        # Salvataggio del plot normale
-        if save_plots:
-            plot_path = os.path.join(output_dirs['plots'], f'dropout_activations_{dataset_name.lower()}.png')
-            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-            print(f"🧠 Analisi attivazioni salvata: {plot_path}")
-        
-        plt.show()
-        
-        # GRAFICO CON NORMALIZZAZIONE LOGARITMICA
-        fig_log, axes_log = plt.subplots(1, 3, figsize=(18, 5))
-        fig_log.suptitle(f'Effetto del Dropout sulle Attivazioni - {dataset_name} (Scala Logaritmica)', fontsize=16)
-        
-        # Attivazioni senza dropout - scala log
-        n_without, bins_without, patches_without = axes_log[0].hist(act_without, bins=50, alpha=0.7, color='blue', density=True)
-        axes_log[0].set_yscale('log')
-        axes_log[0].set_title('Attivazioni SENZA Dropout\n(Scala Logaritmica)')
-        axes_log[0].set_xlabel('Valore Attivazione')
-        axes_log[0].set_ylabel('Densità (log)')
-        axes_log[0].grid(True, alpha=0.3)
-        
-        # Attivazioni con dropout - scala log
-        n_with, bins_with, patches_with = axes_log[1].hist(act_with, bins=50, alpha=0.7, color='red', density=True)
-        axes_log[1].set_yscale('log')
-        axes_log[1].set_title('Attivazioni CON Dropout\n(Scala Logaritmica)')
-        axes_log[1].set_xlabel('Valore Attivazione')
-        axes_log[1].set_ylabel('Densità (log)')
-        axes_log[1].grid(True, alpha=0.3)
-        
-        # Confronto sovrapposto - scala log
-        axes_log[2].hist(act_without, bins=50, alpha=0.5, color='blue', density=True, label='Senza Dropout')
-        axes_log[2].hist(act_with, bins=50, alpha=0.5, color='red', density=True, label='Con Dropout')
-        axes_log[2].set_yscale('log')
-        axes_log[2].set_title('Confronto Attivazioni\n(Scala Logaritmica)')
-        axes_log[2].set_xlabel('Valore Attivazione')
-        axes_log[2].set_ylabel('Densità (log)')
-        axes_log[2].legend()
-        axes_log[2].grid(True, alpha=0.3)
-        
-        plt.tight_layout()
-        
-        # Salvataggio del plot logaritmico
-        if save_plots:
-            plot_path_log = os.path.join(output_dirs['plots'], f'dropout_activations_{dataset_name.lower()}_log.png')
-            plt.savefig(plot_path_log, dpi=300, bbox_inches='tight')
-            print(f"📊 Analisi attivazioni logaritmica salvata: {plot_path_log}")
-        
-        plt.show()
-        
-        # Statistiche per confronto
-        print(f"\n📈 STATISTICHE ATTIVAZIONI - {dataset_name}:")
-        print(f"{'='*50}")
-        print(f"SENZA DROPOUT:")
-        print(f"  - Media: {np.mean(act_without):.4f}")
-        print(f"  - Deviazione Standard: {np.std(act_without):.4f}")
-        print(f"  - Min: {np.min(act_without):.4f}")
-        print(f"  - Max: {np.max(act_without):.4f}")
-        print(f"  - Neuroni attivi (>0): {np.sum(act_without > 0)}/{len(act_without)} ({100*np.sum(act_without > 0)/len(act_without):.1f}%)")
-        
-        print(f"\nCON DROPOUT:")
-        print(f"  - Media: {np.mean(act_with):.4f}")
-        print(f"  - Deviazione Standard: {np.std(act_with):.4f}")
-        print(f"  - Min: {np.min(act_with):.4f}")
-        print(f"  - Max: {np.max(act_with):.4f}")
-        print(f"  - Neuroni attivi (>0): {np.sum(act_with > 0)}/{len(act_with)} ({100*np.sum(act_with > 0)/len(act_with):.1f}%)")
-        
-        print(f"\nCOMPARAZIONE:")
-        print(f"  - Riduzione media attivazione: {((np.mean(act_without) - np.mean(act_with))/np.mean(act_without)*100):.1f}%")
-        print(f"  - Riduzione neuroni attivi: {((np.sum(act_without > 0) - np.sum(act_with > 0))/np.sum(act_without > 0)*100):.1f}%")
-
-# Funzione per demo delle visualizzazioni (può essere chiamata separatamente)
 def demo_visualizations(dataset_name='MNIST', model_type='multi'):
     """
     Funzione demo per testare le visualizzazioni senza dover rifare tutto il training
@@ -1573,8 +1535,8 @@ def demo_visualizations(dataset_name='MNIST', model_type='multi'):
     
     # Crea modelli
     if model_type == 'single':
-        model_no_dropout = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.0).to(device)
-        model_with_dropout = MLPSingleHidden(input_size, 512, num_classes, dropout_rate=0.3).to(device)
+        model_no_dropout = MLPSingleHidden(input_size, 256, num_classes, dropout_rate=0.0).to(device)  # Più piccolo
+        model_with_dropout = MLPSingleHidden(input_size, 256, num_classes, dropout_rate=0.5).to(device)
         model_files = [
             f'{dataset_name.lower()}_single_no_dropout.pth',
             f'{dataset_name.lower()}_single_with_dropout.pth'
@@ -1596,11 +1558,9 @@ def demo_visualizations(dataset_name='MNIST', model_type='multi'):
         try:
             model_no_dropout.load_state_dict(torch.load(os.path.join(models_dir, model_files[0])))
             model_with_dropout.load_state_dict(torch.load(os.path.join(models_dir, model_files[1])))
-            
-            print("✅ Modelli caricati con successo!")
-            
+
             # 1. Visualizza campioni con predizioni
-            print("\n📸 1. Visualizzazione campioni con predizioni...")
+            print("\n📸 1. Visualizzazione campioni MNIST...")
             visualize_sample_predictions(model_with_dropout, test_loader, dataset_name, num_samples=12)
             
             # 2. Confronta predizioni dei modelli
@@ -1694,34 +1654,112 @@ def quick_demo(dataset_name='MNIST', epochs=5):
     print("\n✅ Quick demo completata!")
 
 if __name__ == "__main__":
-    # Esegui l'esperimento completo
+    # ENTRY POINT PRINCIPALE
+    # Esegue l'esperimento completo con tutti i moduli
     main()
     
-    # Per testare solo le visualizzazioni (decommentare se necessario):
+    # ===============================================================
+    # ALTERNATIVE EXECUTION MODES (per development/testing)
+    # ===============================================================
+    
+    # MODALITA' DEMO VISUALIZZAZIONI (decommentare se necessario):
+    # Per testare solo visualizzazioni con modelli già trainati
     # demo_visualizations('MNIST', 'multi')
     # demo_visualizations('FashionMNIST', 'single')
     
-    # Per un test veloce (decommentare se necessario):
+    # MODALITA' QUICK TEST (decommentare se necessario):
+    # Per test rapidi durante development
     # quick_demo('MNIST', epochs=3)
 
-# ISTRUZIONI PER L'USO:
-# 
-# 1. ESPERIMENTO COMPLETO:
-#    python examp2.py
-#    (Esegue tutto: training, analisi, visualizzazioni, report)
-#
-# 2. SOLO VISUALIZZAZIONI (se hai già i modelli):
-#    demo_visualizations('MNIST', 'multi')
-#    demo_visualizations('FashionMNIST', 'single')
-#
-# 3. TEST VELOCE (training rapido + visualizzazioni):
-#    quick_demo('MNIST', epochs=3)
-#    quick_demo('FashionMNIST', epochs=5)
-#
-# NUOVE FUNZIONALITÀ AGGIUNTE:
-# - visualize_sample_predictions(): Mostra campioni con predizioni e confidenza
-# - compare_model_predictions(): Confronta predizioni di più modelli sugli stessi campioni
-# - analyze_model_errors(): Analizza e visualizza gli errori più comuni
-# - visualize_dropout_effect(): Mostra l'effetto del dropout sulle attivazioni
-# 
-# Tutti i grafici vengono salvati automaticamente nella cartella plots/
+# ===================================================================
+# DOCUMENTAZIONE FINALE E ISTRUZIONI D'USO
+# ===================================================================
+
+"""
+ISTRUZIONI PER L'UTILIZZO:
+
+1. ESPERIMENTO COMPLETO (RACCOMANDATO):
+   python examp2.py
+   
+   Esegue l'intero workflow:
+   - Training 8 modelli (4 per MNIST + 4 per Fashion-MNIST)
+   - Analisi dropout sistematica
+   - Visualizzazioni avanzate
+   - Report completo automatico
+   
+2. SOLO VISUALIZZIONI (se hai già i modelli trainati):
+   demo_visualizations('MNIST', 'multi')
+   demo_visualizations('FashionMNIST', 'single')
+   
+   Utile per:
+   - Re-analisi dati esistenti
+   - Generazione grafici aggiuntivi
+   - Testing visualizzazioni
+
+3. TEST VELOCE (development mode):
+   quick_demo('MNIST', epochs=3)
+   quick_demo('FashionMNIST', epochs=5)
+   
+   Per:
+   - Verificare funzionamento codice
+   - Debug rapido
+   - Demo presentazioni
+
+NUOVE FUNZIONALITÀ IMPLEMENTATE:
+
+- visualize_sample_predictions(): 
+  Mostra campioni dataset con predizioni modello e confidence scores
+  
+- compare_model_predictions(): 
+  Confronta predizioni di più modelli sugli stessi campioni per analisi comparative
+  
+- analyze_model_errors(): 
+  Identifica e visualizza errori più comuni per insight su failure modes
+  
+- visualize_dropout_effect(): 
+  Analizza effetto dropout su attivazioni neuronali (distribuzione attivazioni)
+
+ORGANIZZAZIONE OUTPUT:
+
+dropout_study_results_YYYYMMDD_HHMMSS/
+├── plots/          # Tutti i grafici generati (.png alta risoluzione)
+├── models/         # Stati modelli salvati (.pth files)
+├── reports/        # Report markdown e log JSON
+└── data/           # Risultati numerici in formato JSON
+
+DIPENDENZE RICHIESTE:
+
+- torch >= 1.9.0
+- torchvision >= 0.10.0  
+- matplotlib >= 3.3.0
+- numpy >= 1.19.0
+- scikit-learn >= 0.24.0
+- seaborn >= 0.11.0
+
+HARDWARE RACCOMANDATO:
+
+- GPU NVIDIA con CUDA (opzionale ma accelera 10-100x)
+- RAM >= 8GB per dataset loading
+- Storage >= 2GB per risultati completi
+
+TROUBLESHOOTING:
+
+1. CUDA out of memory:
+   - Riduci batch_size in load_datasets()
+   - Usa device='cpu' forzatamente
+   
+2. Missing model files:
+   - Riesegui training completo
+   - Verifica percorsi in output_dirs
+   
+3. Import errors:
+   - pip install -r requirements.txt
+   - Controlla versioni PyTorch compatibili
+
+4. Slow execution:
+   - Riduci num_epochs per test
+   - Usa quick_demo() per sviluppo
+   - Abilita GPU se disponibile
+
+Per supporto: verificare log di output e error messages dettagliati.
+"""
